@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ArrowRight, Building2, Ruler, Wrench, Shield, ChevronRight } from "lucide-react";
@@ -69,13 +69,13 @@ export default function HomePage() {
               Premium construction services delivering architectural precision and operational intelligence across the Philippines
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link to="/work">
+              <Link href="/work">
                 <Button size="lg" className="bg-accent hover:bg-accent/90 text-accent-foreground font-semibold text-base">
                   View Our Work
                   <ArrowRight className="ml-2 w-5 h-5" />
                 </Button>
               </Link>
-              <Link to="/contact">
+              <Link href="/contact">
                 <Button size="lg" variant="outline" className="border-primary-foreground text-primary-foreground hover:bg-primary-foreground hover:text-primary font-semibold text-base">
                   Start a Project
                 </Button>
@@ -124,7 +124,7 @@ export default function HomePage() {
           </div>
 
           <div className="text-center mt-12">
-            <Link to="/services">
+            <Link href="/services">
               <Button variant="outline" size="lg" className="font-semibold">
                 View All Services
                 <ChevronRight className="ml-2 w-5 h-5" />
@@ -177,7 +177,7 @@ export default function HomePage() {
           </div>
 
           <div className="text-center mt-12">
-            <Link to="/work">
+            <Link href="/work">
               <Button variant="default" size="lg" className="bg-accent hover:bg-accent/90 text-accent-foreground font-semibold">
                 View Full Portfolio
                 <ArrowRight className="ml-2 w-5 h-5" />
@@ -260,7 +260,7 @@ export default function HomePage() {
             <p className="text-lg text-primary-foreground/90 mb-8 max-w-2xl mx-auto">
               Let's discuss your project and create something exceptional together
             </p>
-            <Link to="/contact">
+            <Link href="/contact">
               <Button size="lg" className="bg-accent hover:bg-accent/90 text-accent-foreground font-semibold text-base">
                 Get in Touch
                 <ArrowRight className="ml-2 w-5 h-5" />
