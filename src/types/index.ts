@@ -284,6 +284,7 @@ export interface Document {
   fileName: string;
   fileUrl: string;
   fileSize: number;
+  fileType: string;
   uploadedBy: string;
   notes: string | null;
   createdAt: string;
@@ -302,6 +303,7 @@ export interface DrawingLog {
   extractedQuantities: Record<string, unknown> | null;
   aiSuggestions: Record<string, unknown> | null;
   confidenceScore: number | null;
+  aiStatus: string | null;
   uploadedBy: string;
   notes: string | null;
   createdAt: string;
@@ -311,6 +313,7 @@ export interface DrawingLog {
 export interface MarketPrice {
   id: string;
   itemName: string;
+  category: string;
   supplier: string | null;
   source: string | null;
   pricePerUnit: number;
@@ -327,6 +330,8 @@ export interface WeeklyLogistics {
   projectId: string;
   weekStartDate: string;
   weekEndDate: string;
+  weekNumber: number;
+  status: string;
   scheduledActivities: string[];
   materialsNeeded: Record<string, unknown>;
   estimatedPettyCash: number;
@@ -350,7 +355,7 @@ export interface AuditLog {
   id: string;
   actorId: string;
   action: string;
-  entity: string;
+  entityType: string;
   entityId: string | null;
   oldValue: Record<string, unknown> | null;
   newValue: Record<string, unknown> | null;

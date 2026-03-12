@@ -130,7 +130,7 @@ export default function BillingPage() {
 
   const summary = filteredItems.reduce(
     (acc, item) => {
-      const amounts = calculateBilling(item.baseAmount, item.progressPercent || undefined);
+      const amounts = calculateBilling(item.baseAmount);
       acc.totalBilled += item.baseAmount;
       acc.vat += amounts.vat;
       acc.ewt += amounts.ewt;
@@ -289,7 +289,7 @@ export default function BillingPage() {
                   <div className="rounded-lg border p-4 space-y-2 bg-muted/50">
                     <h4 className="font-medium text-sm">Calculated Amounts</h4>
                     {(() => {
-                      const amounts = calculateBilling(formData.baseAmount, formData.progressPercent || undefined);
+                      const amounts = calculateBilling(formData.baseAmount);
                       return (
                         <div className="grid grid-cols-2 gap-2 text-sm">
                           <div>Base Amount:</div>
@@ -429,7 +429,7 @@ export default function BillingPage() {
                   </TableHeader>
                   <TableBody>
                     {filteredItems.map((item) => {
-                      const amounts = calculateBilling(item.baseAmount, item.progressPercent || undefined);
+                      const amounts = calculateBilling(item.baseAmount);
                       const project = projects.find((p) => p.id === item.projectId);
                       return (
                         <TableRow key={item.id}>

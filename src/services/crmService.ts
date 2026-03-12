@@ -672,27 +672,27 @@ export async function getDrawings(projectId?: string): Promise<DrawingLog[]> {
 
 export async function createDrawing(drawing: Partial<DrawingLog>): Promise<void> {
   const { error } = await supabase.from("drawings").insert({
-    project_id: drawing.projectId,
+    project_id: drawing.projectId || null,
     file_name: drawing.fileName!,
     file_path: drawing.fileUrl!,
     file_type: drawing.fileType || "",
     version: parseFloat(drawing.revisionNumber as string) || 1,
     uploaded_by: drawing.uploadedBy || "",
     status: drawing.status || "uploaded",
-    extracted_data: drawing.extractedQuantities || null,
+    extracted_data: drawing.extractedQuantities as any || null,
     ai_status: drawing.aiStatus || null,
     notes: drawing.notes || "",
-  });
+  } as any);
   if (error) throw error;
 }
 
 export async function updateDrawing(id: string, updates: Partial<DrawingLog>): Promise<void> {
   const { error } = await supabase.from("drawings").update({
     status: updates.status,
-    extracted_data: updates.extractedQuantities,
+    extracted_data: updates.extractedQuantities as any,
     ai_status: updates.aiStatus,
     notes: updates.notes,
-  }).eq("id", id);
+  } as any).eq("id", id);
   if (error) throw error;
 }
 
@@ -729,25 +729,25 @@ export async function getWeeklyLogistics(projectId: string): Promise<WeeklyLogis
 
 export async function createWeeklyLogistics(logistics: Partial<WeeklyLogistics>): Promise<void> {
   const { error } = await supabase.from("weekly_logistics").insert({
-    project_id: logistics.projectId,
+    project_id: logistics.projectId || null,
     week_start_date: logistics.weekStartDate!,
     week_end_date: logistics.weekEndDate!,
     week_number: logistics.weekNumber || 1,
-    materials: logistics.materialsNeeded || {},
+    materials: logistics.materialsNeeded as any || {},
     estimated_cash: logistics.estimatedPettyCash || 0,
-    tasks: logistics.suggestedTasks || [],
+    tasks: logistics.suggestedTasks as any || [],
     status: logistics.status || "draft",
-  });
+  } as any);
   if (error) throw error;
 }
 
 export async function updateWeeklyLogistics(id: string, updates: Partial<WeeklyLogistics>): Promise<void> {
   const { error } = await supabase.from("weekly_logistics").update({
     status: updates.status,
-    materials: updates.materialsNeeded,
+    materials: updates.materialsNeeded as any,
     estimated_cash: updates.estimatedPettyCash,
-    tasks: updates.suggestedTasks,
-  }).eq("id", id);
+    tasks: updates.suggestedTasks as any,
+  } as any).eq("id", id);
   if (error) throw error;
 }
 
