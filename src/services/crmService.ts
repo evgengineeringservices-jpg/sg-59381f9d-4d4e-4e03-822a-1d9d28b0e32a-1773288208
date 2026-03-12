@@ -485,8 +485,8 @@ export async function getPlanningPhases(projectId: string): Promise<PlanningPhas
   return (data || []).map(mapPlanningPhase);
 }
 
-export async function createPlanningPhase(phase: Partial<PlanningPhase>): Promise<void> {
-  const { error } = await supabase.from("planning_phases").insert({
+export async function createPlanningPhase(phase: Partial<PlanningPhase>): Promise<PlanningPhase> {
+  const { data, error } = await supabase.from("planning_phases").insert({
     project_id: phase.projectId!,
     phase: phase.name!,
     start_date: phase.startDate!,
@@ -494,8 +494,9 @@ export async function createPlanningPhase(phase: Partial<PlanningPhase>): Promis
     status: phase.status || "not_started",
     progress: phase.progress || 0,
     dependencies: phase.dependencies || [],
-  });
+  }).select().single();
   if (error) throw error;
+  return mapPlanningPhase(data);
 }
 
 export async function updatePlanningPhase(id: string, updates: Partial<PlanningPhase>): Promise<void> {

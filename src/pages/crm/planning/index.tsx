@@ -32,17 +32,19 @@ import {
   getBOQItems
 } from "@/services/crmService";
 import { Plus, Edit2, Trash2, Calendar, TrendingUp, GanttChart, Sparkles, Loader2, RefreshCw } from "lucide-react";
-import type { Project, PlanningPhase } from "@/types";
+import type { Project, PlanningPhase, Role } from "@/types";
 
 export default function PlanningPage() {
   const { toast } = useToast();
+  const [selectedProject, setSelectedProject] = useState<string>("");
   const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [phases, setPhases] = useState<PlanningPhase[]>([]);
-  const [viewMode, setViewMode] = useState<"gantt" | "list">("list");
   const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPhase, setEditingPhase] = useState<PlanningPhase | null>(null);
+  const [viewMode, setViewMode] = useState<"list" | "gantt">("list");
   const [generatingSchedule, setGeneratingSchedule] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -63,17 +65,17 @@ export default function PlanningPage() {
   }, []);
 
   useEffect(() => {
-    if (selectedProjectId) {
+    if (selectedProject) {
       loadPhases();
     }
-  }, [selectedProjectId]);
+  }, [selectedProject]);
 
   async function loadProjects() {
     try {
       const data = await getProjects();
       setProjects(data);
       if (data.length > 0) {
-        setSelectedProjectId(data[0].id);
+        setSelectedProject(data[0].id);
       }
     } catch (error) {
       console.error("Error loading projects:", error);
@@ -84,7 +86,7 @@ export default function PlanningPage() {
 
   async function loadPhases() {
     try {
-      const data = await getPlanningPhases(selectedProjectId);
+      const data = await getPlanningPhases(selectedProject);
       setPhases(data);
     } catch (error) {
       console.error("Error loading phases:", error);
@@ -137,7 +139,7 @@ export default function PlanningPage() {
       } else {
         await createPlanningPhase({
           ...phaseData,
-          projectId: selectedProjectId,
+          projectId: selectedProject,
           assignedUserId: null,
         } as Omit<PlanningPhase, "id" | "createdAt" | "updatedAt">);
       }
@@ -159,81 +161,174 @@ export default function PlanningPage() {
   }
 
   const handleGenerateSchedule = async () => {
-    if (!selectedProjectId) return;
+    if (!selectedProject) {
+      toast({
+        title: "Error",
+        description: "Please select a project first",
+        variant: "destructive",
+      });
+      return;
+    }
 
+    setGeneratingSchedule(true);
     try {
-      setGeneratingSchedule(true);
-      toast({ title: "Generating project schedule from BOQ..." });
-
       // Get BOQ items for the project
-      const boqItems = await getBOQItems(selectedProjectId);
+      const boqItems = await getBOQItems(selectedProject);
       
       if (boqItems.length === 0) {
         toast({
-          title: "No BOQ items found",
+          title: "No BOQ Items",
           description: "Please create BOQ items first before generating schedule",
           variant: "destructive",
         });
+        setGeneratingSchedule(false);
         return;
       }
 
-      // Get project details for date range
-      const projectData = projects.find(p => p.id === selectedProjectId);
-      if (!projectData) return;
-
-      const startDate = new Date(projectData.startDate);
-      const endDate = new Date(projectData.endDate);
-
-      // Auto-generate phases from BOQ categories
-      const categories = [...new Set(boqItems.map(item => item.category))];
-      const totalDuration = Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-      const daysPerPhase = Math.floor(totalDuration / categories.length);
-
-      let currentDate = new Date(startDate);
-      const generatedPhases = [];
-
-      for (let i = 0; i < categories.length; i++) {
-        const category = categories[i];
-        const phaseStartDate = new Date(currentDate);
-        const phaseEndDate = new Date(currentDate);
-        phaseEndDate.setDate(phaseEndDate.getDate() + daysPerPhase);
-
-        // Adjust last phase to match project end date
-        if (i === categories.length - 1) {
-          phaseEndDate.setTime(endDate.getTime());
+      // Group BOQ items by category
+      const categoryGroups = boqItems.reduce((acc, item) => {
+        const category = item.category;
+        if (!acc[category]) {
+          acc[category] = [];
         }
+        acc[category].push(item);
+        return acc;
+      }, {} as Record<string, typeof boqItems>);
+
+      // Define phase duration mapping (in days per item)
+      const durationMapping: Record<string, number> = {
+        mobilization_demobilization: 7,
+        earthworks: 2,
+        substructure_foundation: 3,
+        concrete_works: 4,
+        reinforcing_steel: 4,
+        structural_steel: 4,
+        masonry: 2.5,
+        carpentry_joinery: 2,
+        roofing_waterproofing: 3,
+        doors_windows: 2,
+        floor_finishes: 2,
+        wall_finishes: 2,
+        ceiling_works: 2,
+        painting: 2,
+        plumbing_sanitary: 3,
+        electrical_works: 3,
+        mechanical_hvac: 3,
+        fire_protection: 2,
+        site_development: 3,
+        miscellaneous: 1,
+      };
+
+      // Define role assignment per category
+      const roleMapping: Record<string, string> = {
+        mobilization_demobilization: "project_coordinator",
+        earthworks: "project_engineer",
+        substructure_foundation: "project_engineer",
+        concrete_works: "project_engineer",
+        reinforcing_steel: "project_engineer",
+        structural_steel: "project_engineer",
+        masonry: "project_engineer",
+        carpentry_joinery: "project_engineer",
+        roofing_waterproofing: "project_engineer",
+        doors_windows: "project_coordinator",
+        floor_finishes: "project_coordinator",
+        wall_finishes: "project_coordinator",
+        ceiling_works: "project_coordinator",
+        painting: "project_coordinator",
+        plumbing_sanitary: "project_engineer",
+        electrical_works: "project_engineer",
+        mechanical_hvac: "project_engineer",
+        fire_protection: "project_engineer",
+        site_development: "project_engineer",
+        miscellaneous: "project_coordinator",
+      };
+
+      // Define category display names
+      const categoryNames: Record<string, string> = {
+        mobilization_demobilization: "Mobilization & Demobilization",
+        earthworks: "Earthworks",
+        substructure_foundation: "Substructure & Foundation",
+        concrete_works: "Concrete Works",
+        reinforcing_steel: "Reinforcing Steel",
+        structural_steel: "Structural Steel",
+        masonry: "Masonry Works",
+        carpentry_joinery: "Carpentry & Joinery",
+        roofing_waterproofing: "Roofing & Waterproofing",
+        doors_windows: "Doors & Windows",
+        floor_finishes: "Floor Finishes",
+        wall_finishes: "Wall Finishes",
+        ceiling_works: "Ceiling Works",
+        painting: "Painting Works",
+        plumbing_sanitary: "Plumbing & Sanitary",
+        electrical_works: "Electrical Works",
+        mechanical_hvac: "Mechanical & HVAC",
+        fire_protection: "Fire Protection",
+        site_development: "Site Development",
+        miscellaneous: "Miscellaneous Works",
+      };
+
+      // Generate phases from BOQ categories
+      const generatedPhases = [];
+      let currentStartDate = new Date();
+      let previousPhase: string | null = null;
+
+      for (const [category, items] of Object.entries(categoryGroups)) {
+        const itemCount = items.length;
+        const baseDuration = durationMapping[category] || 3;
+        const duration = category === "mobilization_demobilization" 
+          ? baseDuration 
+          : Math.ceil(itemCount * baseDuration);
+
+        const endDate = new Date(currentStartDate);
+        endDate.setDate(endDate.getDate() + duration);
+
+        const phaseName = categoryNames[category] || category.replace(/_/g, " ");
+        const assignedRole = roleMapping[category] || "project_engineer";
+
+        // Determine if this is a milestone
+        const isMilestone = [
+          "mobilization_demobilization",
+          "substructure_foundation",
+          "concrete_works",
+          "roofing_waterproofing",
+        ].includes(category);
 
         const phaseData = {
-          projectId: selectedProjectId,
-          phaseName: category,
-          startDate: phaseStartDate.toISOString().split('T')[0],
-          endDate: phaseEndDate.toISOString().split('T')[0],
-          status: 'not_started' as const,
+          projectId: selectedProject,
+          name: phaseName,
+          startDate: currentStartDate.toISOString(),
+          endDate: endDate.toISOString(),
+          status: "not_started" as const,
           progress: 0,
-          dependencies: i > 0 ? [generatedPhases[i - 1].id] : [],
-          assignedRole: getDefaultRoleForCategory(category) as any,
-          isMilestone: false,
-          isBillingTrigger: false,
+          assignedRole: assignedRole as Role,
+          dependencies: previousPhase ? [previousPhase] : [],
+          isMilestone,
+          isBillingTrigger: isMilestone,
         };
 
         const createdPhase = await createPlanningPhase(phaseData);
         generatedPhases.push(createdPhase);
 
-        currentDate = new Date(phaseEndDate);
-        currentDate.setDate(currentDate.getDate() + 1);
+        // Set next phase start date (1 day after current phase ends)
+        currentStartDate = new Date(endDate);
+        currentStartDate.setDate(currentStartDate.getDate() + 1);
+
+        // Track previous phase for dependencies
+        previousPhase = createdPhase.id;
       }
 
       toast({
-        title: "Schedule generated successfully!",
-        description: `Created ${generatedPhases.length} phases from BOQ categories`,
+        title: "Success",
+        description: `Generated ${generatedPhases.length} project phases from BOQ`,
       });
 
-      await loadPhases();
+      // Reload phases
+      loadPhases();
     } catch (error) {
-      console.error("Failed to generate schedule:", error);
+      console.error("Error generating schedule:", error);
       toast({
         title: "Error",
-        description: "Failed to generate project schedule",
+        description: error instanceof Error ? error.message : "Failed to generate schedule",
         variant: "destructive",
       });
     } finally {
@@ -461,7 +556,7 @@ export default function PlanningPage() {
         <div className="flex items-center gap-4">
           <div className="flex-1">
             <Label htmlFor="projectSelect">Select Project</Label>
-            <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+            <Select value={selectedProject} onValueChange={setSelectedProject}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -479,15 +574,20 @@ export default function PlanningPage() {
         <div className="flex items-center gap-2 flex-wrap">
           <Button
             onClick={handleGenerateSchedule}
-            disabled={!selectedProjectId || generatingSchedule}
-            variant="outline"
+            disabled={!selectedProject || generating || refreshing}
+            className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700"
           >
-            {generatingSchedule ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            {generating ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Generating...
+              </>
             ) : (
-              <Sparkles className="w-4 h-4 mr-2" />
+              <>
+                <Sparkles className="w-4 h-4 mr-2" />
+                Generate Schedule from BOQ
+              </>
             )}
-            Generate Schedule from BOQ
           </Button>
         </div>
 
