@@ -1,19 +1,7 @@
 import { useState, useEffect } from "react";
-import { CRMLayout } from "@/components/layout/CRMLayout";
+import { Plus, RefreshCw, TrendingUp, DollarSign, Wrench, Package } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -21,460 +9,407 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { getProjects, getBOQItems, createBOQItem, updateBOQItem, deleteBOQItem } from "@/services/crmService";
-import { formatPeso, BOQ_CATEGORIES, DPWH_UNITS } from "@/constants";
-import { Plus, Edit2, Trash2, Calculator, TrendingUp, Package, Wrench } from "lucide-react";
-import type { Project, BOQItem, BOQCategory, DPWHUnit } from "@/types";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useToast } from "@/hooks/use-toast";
+import { formatPeso } from "@/lib/boqCalculations";
+import {
+  getProjects,
+  getBOQItems,
+  createBOQItem,
+  updateBOQItem,
+  deleteBOQItem,
+} from "@/services/crmService";
+import { refreshBOQCostsFromMarket, checkMarketPriceChanges } from "@/lib/boqCalculations";
+import { BOQItemDialog } from "@/components/boq/BOQItemDialog";
+import type { Project, BOQItem } from "@/types";
+import { BOQ_CATEGORIES } from "@/constants";
 
 export default function BOQPage() {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
-  const [boqItems, setBOQItems] = useState<BOQItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [selectedProject, setSelectedProject] = useState<string>("");
+  const [items, setItems] = useState<BOQItem[]>([]);
+  const [filteredItems, setFilteredItems] = useState<BOQItem[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<BOQItem | null>(null);
-
-  const [formData, setFormData] = useState({
-    itemNo: "",
-    dpwhItemCode: "",
-    description: "",
-    category: "concrete" as BOQCategory,
-    unit: "cu.m" as DPWHUnit,
-    quantity: 0,
-    unitCost: 0,
-    laborCost: 0,
-    materialCost: 0,
-    markup: 0,
-  });
+  const [refreshing, setRefreshing] = useState(false);
+  const [priceChanges, setPriceChanges] = useState<any[]>([]);
+  const { toast } = useToast();
 
   useEffect(() => {
     loadProjects();
+    loadPriceChanges();
   }, []);
 
   useEffect(() => {
-    if (selectedProjectId) {
+    if (selectedProject) {
       loadBOQItems();
     }
-  }, [selectedProjectId]);
+  }, [selectedProject]);
+
+  useEffect(() => {
+    filterItems();
+  }, [selectedCategory, items]);
 
   async function loadProjects() {
     try {
       const data = await getProjects();
       setProjects(data);
-      if (data.length > 0) {
-        setSelectedProjectId(data[0].id);
+      if (data.length > 0 && !selectedProject) {
+        setSelectedProject(data[0].id);
       }
     } catch (error) {
-      console.error("Error loading projects:", error);
-    } finally {
-      setLoading(false);
+      toast({
+        title: "Error",
+        description: "Failed to load projects",
+        variant: "destructive",
+      });
     }
   }
 
   async function loadBOQItems() {
     try {
-      const data = await getBOQItems(selectedProjectId);
-      setBOQItems(data);
+      const data = await getBOQItems(selectedProject);
+      setItems(data);
     } catch (error) {
-      console.error("Error loading BOQ items:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load BOQ items",
+        variant: "destructive",
+      });
     }
   }
 
-  function handleOpenDialog(item?: BOQItem) {
-    if (item) {
-      setEditingItem(item);
-      setFormData({
-        itemNo: item.itemNo,
-        dpwhItemCode: item.dpwhItemCode || "",
-        description: item.description,
-        category: item.category,
-        unit: item.unit,
-        quantity: item.quantity,
-        unitCost: item.unitCost,
-        laborCost: item.laborCost,
-        materialCost: item.materialCost,
-        markup: item.markup || 0,
-      });
+  async function loadPriceChanges() {
+    try {
+      const changes = await checkMarketPriceChanges(30);
+      setPriceChanges(changes);
+    } catch (error) {
+      console.error("Failed to load price changes:", error);
+    }
+  }
+
+  function filterItems() {
+    if (selectedCategory === "all") {
+      setFilteredItems(items);
     } else {
-      setEditingItem(null);
-      setFormData({
-        itemNo: "",
-        dpwhItemCode: "",
-        description: "",
-        category: "concrete",
-        unit: "cu.m",
-        quantity: 0,
-        unitCost: 0,
-        laborCost: 0,
-        materialCost: 0,
-        markup: 0,
-      });
+      setFilteredItems(items.filter((item) => item.category === selectedCategory));
     }
-    setDialogOpen(true);
   }
 
-  async function handleSubmit() {
+  async function handleSave(data: Partial<BOQItem>) {
     try {
       if (editingItem) {
-        await updateBOQItem(editingItem.id, formData as Partial<BOQItem>);
+        await updateBOQItem(editingItem.id, data);
+        toast({ title: "BOQ item updated successfully" });
       } else {
-        await createBOQItem({
-          ...formData,
-          projectId: selectedProjectId,
-        } as Omit<BOQItem, "id" | "createdAt" | "updatedAt">);
+        await createBOQItem(data);
+        toast({ title: "BOQ item created successfully" });
       }
-      setDialogOpen(false);
       loadBOQItems();
+      loadPriceChanges();
     } catch (error) {
-      console.error("Error saving BOQ item:", error);
+      toast({
+        title: "Error",
+        description: "Failed to save BOQ item",
+        variant: "destructive",
+      });
     }
   }
 
   async function handleDelete(id: string) {
     if (!confirm("Are you sure you want to delete this BOQ item?")) return;
+
     try {
       await deleteBOQItem(id);
+      toast({ title: "BOQ item deleted successfully" });
       loadBOQItems();
     } catch (error) {
-      console.error("Error deleting BOQ item:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete BOQ item",
+        variant: "destructive",
+      });
     }
   }
 
-  const groupedItems = boqItems.reduce((acc, item) => {
-    if (!acc[item.category]) {
-      acc[item.category] = [];
+  async function handleRefreshCosts() {
+    if (!selectedProject) return;
+
+    try {
+      setRefreshing(true);
+      const result = await refreshBOQCostsFromMarket(selectedProject);
+      toast({
+        title: "BOQ costs refreshed",
+        description: `Updated ${result.updatedCount} items. Total cost change: ${formatPeso(result.totalCostChange)}`,
+      });
+      loadBOQItems();
+      loadPriceChanges();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to refresh BOQ costs",
+        variant: "destructive",
+      });
+    } finally {
+      setRefreshing(false);
     }
-    acc[item.category].push(item);
-    return acc;
-  }, {} as Record<BOQCategory, BOQItem[]>);
-
-  const totalMaterial = boqItems.reduce((sum, item) => sum + item.materialCost * item.quantity, 0);
-  const totalLabor = boqItems.reduce((sum, item) => sum + item.laborCost * item.quantity, 0);
-  const totalCost = boqItems.reduce((sum, item) => sum + item.unitCost * item.quantity, 0);
-  const totalMarkup = boqItems.reduce((sum, item) => sum + (item.markup || 0) * item.quantity, 0);
-  const estimatedGrossProfit = totalMarkup;
-
-  if (loading) {
-    return (
-      <CRMLayout>
-        <div className="flex items-center justify-center h-96">
-          <div className="text-muted-foreground">Loading BOQ...</div>
-        </div>
-      </CRMLayout>
-    );
   }
+
+  // Calculate summary
+  const totalMaterialCost = filteredItems.reduce((sum, item) => sum + item.materialCost, 0);
+  const totalLaborCost = filteredItems.reduce((sum, item) => sum + item.laborCost, 0);
+  const totalCost = totalMaterialCost + totalLaborCost;
+
+  const significantChanges = priceChanges.filter((c) => Math.abs(c.priceChangePercent) > 10);
 
   return (
-    <CRMLayout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="font-heading text-3xl md:text-4xl mb-2 tracking-wide">BILL OF QUANTITIES</h1>
-            <p className="text-muted-foreground">DPWH-style BOQ / Estimation</p>
-          </div>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={() => handleOpenDialog()} className="bg-accent hover:bg-accent/90 text-accent-foreground">
-                <Plus className="w-4 h-4 mr-2" />
-                Add BOQ Item
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>{editingItem ? "Edit BOQ Item" : "Add BOQ Item"}</DialogTitle>
-                <DialogDescription>
-                  {editingItem ? "Update BOQ item details" : "Add a new item to the bill of quantities"}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="itemNo">Item No *</Label>
-                    <Input
-                      id="itemNo"
-                      value={formData.itemNo}
-                      onChange={(e) => setFormData({ ...formData, itemNo: e.target.value })}
-                      placeholder="1.0"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="dpwhItemCode">DPWH Code</Label>
-                    <Input
-                      id="dpwhItemCode"
-                      value={formData.dpwhItemCode}
-                      onChange={(e) => setFormData({ ...formData, dpwhItemCode: e.target.value })}
-                      placeholder="300-01"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="description">Description *</Label>
-                  <Textarea
-                    id="description"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Excavation and Embankment"
-                    rows={2}
-                  />
-                </div>
-
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="category">Category *</Label>
-                    <Select
-                      value={formData.category}
-                      onValueChange={(value) => setFormData({ ...formData, category: value as BOQCategory })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {BOQ_CATEGORIES.map((cat) => (
-                          <SelectItem key={cat.value} value={cat.value}>
-                            {cat.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="unit">Unit *</Label>
-                    <Select
-                      value={formData.unit}
-                      onValueChange={(value) => setFormData({ ...formData, unit: value as DPWHUnit })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {DPWH_UNITS.map((unit) => (
-                          <SelectItem key={unit.value} value={unit.value}>
-                            {unit.label || unit.value}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="quantity">Quantity *</Label>
-                    <Input
-                      id="quantity"
-                      type="number"
-                      step="0.01"
-                      value={formData.quantity}
-                      onChange={(e) => setFormData({ ...formData, quantity: parseFloat(e.target.value) })}
-                      placeholder="100"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="materialCost">Material Cost (per unit)</Label>
-                    <Input
-                      id="materialCost"
-                      type="number"
-                      step="0.01"
-                      value={formData.materialCost}
-                      onChange={(e) => setFormData({ ...formData, materialCost: parseFloat(e.target.value) })}
-                      placeholder="500"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="laborCost">Labor Cost (per unit)</Label>
-                    <Input
-                      id="laborCost"
-                      type="number"
-                      step="0.01"
-                      value={formData.laborCost}
-                      onChange={(e) => setFormData({ ...formData, laborCost: parseFloat(e.target.value) })}
-                      placeholder="200"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="unitCost">Unit Cost *</Label>
-                    <Input
-                      id="unitCost"
-                      type="number"
-                      step="0.01"
-                      value={formData.unitCost}
-                      onChange={(e) => setFormData({ ...formData, unitCost: parseFloat(e.target.value) })}
-                      placeholder="750"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="markup">Markup (per unit)</Label>
-                    <Input
-                      id="markup"
-                      type="number"
-                      step="0.01"
-                      value={formData.markup}
-                      onChange={(e) => setFormData({ ...formData, markup: parseFloat(e.target.value) })}
-                      placeholder="50"
-                    />
-                  </div>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleSubmit} className="bg-accent hover:bg-accent/90 text-accent-foreground">
-                  {editingItem ? "Update Item" : "Add Item"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+    <div className="p-6 space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-start">
+        <div>
+          <h1 className="text-3xl font-bold">Bill of Quantities (BOQ)</h1>
+          <p className="text-muted-foreground mt-1">
+            DPWH-style estimation with automated cost calculation
+          </p>
         </div>
-
-        <div className="flex items-center gap-4">
-          <div className="flex-1">
-            <Label htmlFor="projectSelect">Select Project</Label>
-            <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {projects.map((project) => (
-                  <SelectItem key={project.id} value={project.id}>
-                    {project.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={handleRefreshCosts}
+            disabled={!selectedProject || refreshing}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
+            Refresh Costs
+          </Button>
+          <Button
+            onClick={() => {
+              setEditingItem(null);
+              setDialogOpen(true);
+            }}
+            disabled={!selectedProject}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Item
+          </Button>
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <Card className="shadow-card">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 rounded-xl bg-chart-1/10 flex items-center justify-center">
-                  <Calculator className="w-6 h-6 text-chart-1" />
-                </div>
-              </div>
-              <div className="text-2xl font-bold mb-1">{formatPeso(totalCost)}</div>
-              <div className="text-sm text-muted-foreground">Total Cost</div>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-card">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 rounded-xl bg-chart-2/10 flex items-center justify-center">
-                  <Wrench className="w-6 h-6 text-chart-2" />
-                </div>
-              </div>
-              <div className="text-2xl font-bold mb-1">{formatPeso(totalLabor)}</div>
-              <div className="text-sm text-muted-foreground">Total Labor</div>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-card">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 rounded-xl bg-chart-3/10 flex items-center justify-center">
-                  <Package className="w-6 h-6 text-chart-3" />
-                </div>
-              </div>
-              <div className="text-2xl font-bold mb-1">{formatPeso(totalMaterial)}</div>
-              <div className="text-sm text-muted-foreground">Total Material</div>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-card">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
-                  <TrendingUp className="w-6 h-6 text-green-600" />
-                </div>
-              </div>
-              <div className="text-2xl font-bold mb-1">{formatPeso(estimatedGrossProfit)}</div>
-              <div className="text-sm text-muted-foreground">Est. Gross Profit</div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {boqItems.length === 0 ? (
-          <Card className="shadow-card">
-            <CardContent className="flex flex-col items-center justify-center py-16">
-              <div className="text-muted-foreground mb-4">No BOQ items yet</div>
-              <Button onClick={() => handleOpenDialog()} className="bg-accent hover:bg-accent/90 text-accent-foreground">
-                <Plus className="w-4 h-4 mr-2" />
-                Add Your First Item
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-6">
-            {Object.entries(groupedItems).map(([category, items]) => (
-              <Card key={category} className="shadow-card">
-                <CardHeader>
-                  <CardTitle className="text-lg">
-                    {BOQ_CATEGORIES.find(c => c.value === category)?.label || category}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="border-b">
-                        <tr className="text-sm text-muted-foreground">
-                          <th className="text-left py-3 px-4">Item No</th>
-                          <th className="text-left py-3 px-4">DPWH Code</th>
-                          <th className="text-left py-3 px-4">Description</th>
-                          <th className="text-right py-3 px-4">Unit</th>
-                          <th className="text-right py-3 px-4">Qty</th>
-                          <th className="text-right py-3 px-4">Unit Cost</th>
-                          <th className="text-right py-3 px-4">Total</th>
-                          <th className="text-right py-3 px-4">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {items.map((item) => (
-                          <tr key={item.id} className="border-b last:border-0">
-                            <td className="py-3 px-4 text-sm">{item.itemNo}</td>
-                            <td className="py-3 px-4 text-sm text-muted-foreground">{item.dpwhItemCode || "-"}</td>
-                            <td className="py-3 px-4 text-sm">{item.description}</td>
-                            <td className="py-3 px-4 text-sm text-right">{item.unit}</td>
-                            <td className="py-3 px-4 text-sm text-right">{item.quantity}</td>
-                            <td className="py-3 px-4 text-sm text-right">{formatPeso(item.unitCost)}</td>
-                            <td className="py-3 px-4 text-sm font-semibold text-right">
-                              {formatPeso(item.unitCost * item.quantity)}
-                            </td>
-                            <td className="py-3 px-4 text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleOpenDialog(item)}
-                                >
-                                  <Edit2 className="w-4 h-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleDelete(item.id)}
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
       </div>
-    </CRMLayout>
+
+      {/* Price Change Alert */}
+      {significantChanges.length > 0 && (
+        <Alert className="border-amber-500">
+          <TrendingUp className="h-4 w-4" />
+          <AlertDescription>
+            <strong>{significantChanges.length} items</strong> have significant price changes
+            in the last 30 days. Click "Refresh Costs" to update BOQ.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Project Selector */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex gap-4 items-center">
+            <div className="flex-1">
+              <label className="text-sm font-medium mb-2 block">Select Project</label>
+              <Select value={selectedProject} onValueChange={setSelectedProject}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a project" />
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.name} - {project.client}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex-1">
+              <label className="text-sm font-medium mb-2 block">Filter by Category</label>
+              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  {BOQ_CATEGORIES.map((cat) => (
+                    <SelectItem key={cat.value} value={cat.value}>
+                      {cat.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Summary Cards */}
+      {selectedProject && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Package className="h-4 w-4" />
+                Total Material Cost
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatPeso(totalMaterialCost)}</div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Wrench className="h-4 w-4" />
+                Total Labor Cost
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatPeso(totalLaborCost)}</div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <DollarSign className="h-4 w-4" />
+                Total BOQ Cost
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-primary">{formatPeso(totalCost)}</div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium">Items</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{filteredItems.length}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {selectedCategory === "all" ? "All categories" : BOQ_CATEGORIES.find(c => c.value === selectedCategory)?.label}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* BOQ Table */}
+      {selectedProject && (
+        <Card>
+          <CardHeader>
+            <CardTitle>BOQ Items</CardTitle>
+            <CardDescription>
+              {selectedCategory === "all"
+                ? "All BOQ items"
+                : `Filtered by ${BOQ_CATEGORIES.find(c => c.value === selectedCategory)?.label}`}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {filteredItems.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                No BOQ items found. Add your first item to get started.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="border-b">
+                    <tr className="text-left text-sm text-muted-foreground">
+                      <th className="pb-3 font-medium">Item No</th>
+                      <th className="pb-3 font-medium">DPWH Code</th>
+                      <th className="pb-3 font-medium">Description</th>
+                      <th className="pb-3 font-medium">Category</th>
+                      <th className="pb-3 font-medium text-right">Qty</th>
+                      <th className="pb-3 font-medium">Unit</th>
+                      <th className="pb-3 font-medium text-right">Material</th>
+                      <th className="pb-3 font-medium text-right">Labor</th>
+                      <th className="pb-3 font-medium text-right">Total</th>
+                      <th className="pb-3 font-medium text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredItems.map((item) => (
+                      <tr key={item.id} className="border-b hover:bg-accent/50">
+                        <td className="py-3 font-medium">{item.itemNo}</td>
+                        <td className="py-3 text-sm text-muted-foreground">
+                          {item.dpwhItemCode || "-"}
+                        </td>
+                        <td className="py-3 max-w-xs">
+                          <div className="font-medium">{item.description}</div>
+                        </td>
+                        <td className="py-3">
+                          <Badge variant="outline" className="text-xs">
+                            {BOQ_CATEGORIES.find(c => c.value === item.category)?.label}
+                          </Badge>
+                        </td>
+                        <td className="py-3 text-right">{item.quantity}</td>
+                        <td className="py-3 text-sm">{item.unit}</td>
+                        <td className="py-3 text-right font-medium">
+                          {formatPeso(item.materialCost)}
+                        </td>
+                        <td className="py-3 text-right font-medium">
+                          {formatPeso(item.laborCost)}
+                        </td>
+                        <td className="py-3 text-right font-bold text-primary">
+                          {formatPeso(item.total)}
+                        </td>
+                        <td className="py-3 text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setEditingItem(item);
+                                setDialogOpen(true);
+                              }}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDelete(item.id)}
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="border-t-2 bg-accent/30">
+                    <tr className="font-bold">
+                      <td colSpan={6} className="py-4 text-right">
+                        TOTAL:
+                      </td>
+                      <td className="py-4 text-right">{formatPeso(totalMaterialCost)}</td>
+                      <td className="py-4 text-right">{formatPeso(totalLaborCost)}</td>
+                      <td className="py-4 text-right text-primary text-lg">
+                        {formatPeso(totalCost)}
+                      </td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* BOQ Item Dialog */}
+      <BOQItemDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        item={editingItem}
+        projectId={selectedProject}
+        onSave={handleSave}
+      />
+    </div>
   );
 }
