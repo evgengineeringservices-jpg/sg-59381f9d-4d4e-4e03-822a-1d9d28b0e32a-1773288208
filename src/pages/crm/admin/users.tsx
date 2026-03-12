@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { UserPlus, Search, Shield, Mail, Phone } from "lucide-react";
-import { getProfiles, updateProfile } from "@/services/crmService";
+import { getAllProfiles, updateProfile } from "@/services/crmService";
 import type { Profile, Role } from "@/types";
 
 const ROLE_OPTIONS: { value: Role; label: string }[] = [
@@ -40,7 +40,7 @@ export default function UsersPage() {
   async function loadUsers() {
     setLoading(true);
     try {
-      const data = await getProfiles();
+      const data = await getAllProfiles();
       setUsers(data);
     } catch (error) {
       console.error("Error loading users:", error);

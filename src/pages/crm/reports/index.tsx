@@ -23,15 +23,17 @@ export default function ProgressReportsPage() {
   const [formData, setFormData] = useState({
     projectId: "",
     title: "",
-    reportDate: new Date().toISOString().split("T")[0],
+    date: new Date().toISOString().split("T")[0],
     description: "",
-    progressPercent: 0,
+    progressPercentage: 0,
     weather: "",
     manpower: 0,
     remarks: "",
     linkedPhaseId: "",
     linkedBoqItemId: "",
     sitePhotos: [] as string[],
+    authorId: "system", // Fallback, should be actual auth user
+    milestoneCompleted: false,
   });
 
   useEffect(() => {
@@ -60,30 +62,34 @@ export default function ProgressReportsPage() {
       setFormData({
         projectId: report.projectId,
         title: report.title,
-        reportDate: report.reportDate,
+        date: report.date,
         description: report.description || "",
-        progressPercent: report.progressPercent,
+        progressPercentage: report.progressPercentage,
         weather: report.weather || "",
         manpower: report.manpower || 0,
         remarks: report.remarks || "",
         linkedPhaseId: report.linkedPhaseId || "",
         linkedBoqItemId: report.linkedBoqItemId || "",
         sitePhotos: report.sitePhotos || [],
+        authorId: report.authorId || "system",
+        milestoneCompleted: report.milestoneCompleted || false,
       });
     } else {
       setEditingReport(null);
       setFormData({
         projectId: selectedProject === "all" ? "" : selectedProject,
         title: "",
-        reportDate: new Date().toISOString().split("T")[0],
+        date: new Date().toISOString().split("T")[0],
         description: "",
-        progressPercent: 0,
+        progressPercentage: 0,
         weather: "",
         manpower: 0,
         remarks: "",
         linkedPhaseId: "",
         linkedBoqItemId: "",
         sitePhotos: [],
+        authorId: "system",
+        milestoneCompleted: false,
       });
     }
     setDialogOpen(true);
@@ -165,8 +171,8 @@ export default function ProgressReportsPage() {
                     <Input
                       id="reportDate"
                       type="date"
-                      value={formData.reportDate}
-                      onChange={(e) => setFormData({ ...formData, reportDate: e.target.value })}
+                      value={formData.date}
+                      onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                       required
                     />
                   </div>
@@ -189,8 +195,8 @@ export default function ProgressReportsPage() {
                       type="number"
                       min="0"
                       max="100"
-                      value={formData.progressPercent}
-                      onChange={(e) => setFormData({ ...formData, progressPercent: parseFloat(e.target.value) })}
+                      value={formData.progressPercentage}
+                      onChange={(e) => setFormData({ ...formData, progressPercentage: parseFloat(e.target.value) })}
                       required
                     />
                     <span className="text-sm text-muted-foreground">%</span>
@@ -293,7 +299,7 @@ export default function ProgressReportsPage() {
                         <CardDescription className="flex items-center gap-4 text-sm">
                           <span className="flex items-center gap-1">
                             <Calendar className="h-3 w-3" />
-                            {format(new Date(report.reportDate), "MMM dd, yyyy")}
+                            {format(new Date(report.date), "MMM dd, yyyy")}
                           </span>
                           {project && (
                             <span className="flex items-center gap-1">
@@ -301,17 +307,17 @@ export default function ProgressReportsPage() {
                               {project.name}
                             </span>
                           )}
-                          {report.authorName && (
+                          {report.authorId && (
                             <span className="flex items-center gap-1">
                               <User className="h-3 w-3" />
-                              {report.authorName}
+                              {report.authorId}
                             </span>
                           )}
                         </CardDescription>
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge className="bg-gold text-charcoal">
-                          {report.progressPercent}% Complete
+                          {report.progressPercentage}% Complete
                         </Badge>
                         <Button
                           size="sm"

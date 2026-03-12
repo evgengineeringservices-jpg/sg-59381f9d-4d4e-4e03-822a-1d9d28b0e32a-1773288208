@@ -108,6 +108,16 @@ export const BILLING_TYPES = [
   { value: "milestone", label: "Milestone" },
 ] as const;
 
+// Billing Statuses
+export const BILLING_STATUSES = [
+  { value: "draft", label: "Draft" },
+  { value: "ready_for_review", label: "Ready for Review" },
+  { value: "approved", label: "Approved" },
+  { value: "invoiced", label: "Invoiced" },
+  { value: "paid", label: "Paid" },
+  { value: "overdue", label: "Overdue" },
+] as const;
+
 // Utility function for currency formatting
 export const formatPeso = (amount: number): string => {
   return new Intl.NumberFormat("en-PH", {

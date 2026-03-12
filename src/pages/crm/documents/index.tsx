@@ -88,7 +88,7 @@ export default function DocumentsPage() {
     const matchesCategory = selectedCategory === "all" || doc.category === selectedCategory;
     const matchesSearch = searchQuery === "" || 
       doc.fileName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      doc.description?.toLowerCase().includes(searchQuery.toLowerCase());
+      (doc.notes && doc.notes.toLowerCase().includes(searchQuery.toLowerCase()));
     return matchesCategory && matchesSearch;
   });
 
@@ -164,8 +164,8 @@ export default function DocumentsPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {Object.entries(DOCUMENT_CATEGORIES).map(([key, { label }]) => (
-                        <SelectItem key={key} value={key}>
+                      {DOCUMENT_CATEGORIES.map(({ value, label }) => (
+                        <SelectItem key={value} value={value}>
                           {label}
                         </SelectItem>
                       ))}
@@ -216,8 +216,8 @@ export default function DocumentsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Categories</SelectItem>
-              {Object.entries(DOCUMENT_CATEGORIES).map(([key, { label }]) => (
-                <SelectItem key={key} value={key}>
+              {DOCUMENT_CATEGORIES.map(({ value, label }) => (
+                <SelectItem key={value} value={value}>
                   {label}
                 </SelectItem>
               ))}
@@ -253,7 +253,7 @@ export default function DocumentsPage() {
               <Card key={category}>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    {DOCUMENT_CATEGORIES[category as keyof typeof DOCUMENT_CATEGORIES]?.label || category}
+                    {DOCUMENT_CATEGORIES.find(c => c.value === category)?.label || category}
                     <Badge variant="outline">{docs.length}</Badge>
                   </CardTitle>
                 </CardHeader>
@@ -273,7 +273,7 @@ export default function DocumentsPage() {
                               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                 {project && <span>{project.name}</span>}
                                 <span>•</span>
-                                <span>{format(new Date(doc.uploadedAt), "MMM dd, yyyy")}</span>
+                                <span>{format(new Date(doc.createdAt), "MMM dd, yyyy")}</span>
                                 {doc.uploadedBy && (
                                   <>
                                     <span>•</span>

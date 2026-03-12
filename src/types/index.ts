@@ -147,6 +147,7 @@ export interface Lead {
   location: string | null;
   source: string | null;
   notes: string | null;
+  message: string | null;
   status: LeadStatus;
   assignedTo: string | null;
   createdAt: string;

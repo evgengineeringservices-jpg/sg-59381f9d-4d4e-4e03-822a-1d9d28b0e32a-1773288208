@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Truck, Calendar, AlertTriangle, CheckCircle2, DollarSign } from "lucide-react";
 import { getProjects, getPlanningPhases, getBOQItems } from "@/services/crmService";
-import { formatCurrency } from "@/constants";
+import { formatPeso } from "@/constants";
 import type { Project, PlanningPhase, BOQItem } from "@/types";
 import { format, addDays, startOfWeek, endOfWeek, isWithinInterval } from "date-fns";
 
@@ -132,7 +132,7 @@ export default function LogisticsPage() {
                 <DollarSign className="h-4 w-4" />
                 Estimated Material Cost
               </CardDescription>
-              <CardTitle className="text-2xl">{formatCurrency(totalMaterialCost)}</CardTitle>
+              <CardTitle className="text-2xl">{formatPeso(totalMaterialCost)}</CardTitle>
             </CardHeader>
           </Card>
           <Card>
@@ -141,7 +141,7 @@ export default function LogisticsPage() {
                 <DollarSign className="h-4 w-4" />
                 Estimated Petty Cash
               </CardDescription>
-              <CardTitle className="text-2xl text-green-600">{formatCurrency(estimatedPettyCash)}</CardTitle>
+              <CardTitle className="text-2xl text-green-600">{formatPeso(estimatedPettyCash)}</CardTitle>
             </CardHeader>
           </Card>
         </div>
@@ -181,7 +181,7 @@ export default function LogisticsPage() {
                           className={
                             phase.status === "completed"
                               ? "bg-green-500"
-                              : phase.status === "in-progress"
+                              : phase.status === "in_progress"
                               ? "bg-blue-500"
                               : phase.status === "delayed"
                               ? "bg-red-500"
@@ -231,7 +231,7 @@ export default function LogisticsPage() {
                             </TableCell>
                             <TableCell className="text-right">{material.quantity?.toFixed(2) || 0}</TableCell>
                             <TableCell>{material.unit}</TableCell>
-                            <TableCell className="text-right font-medium">{formatCurrency(material.estimatedCost)}</TableCell>
+                            <TableCell className="text-right font-medium">{formatPeso(material.estimatedCost)}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>

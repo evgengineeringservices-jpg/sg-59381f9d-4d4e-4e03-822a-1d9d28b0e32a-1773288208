@@ -11,8 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Receipt, Calendar, Edit, Trash2 } from "lucide-react";
 import { getBillingItems, createBillingItem, updateBillingItem, deleteBillingItem, getProjects } from "@/services/crmService";
-import { BILLING_TYPES, BILLING_STATUSES, formatCurrency, calculateBillingAmounts, PH_VAT_RATE, PH_EWT_RATE, PH_RETENTION_RATE } from "@/constants";
-import type { BillingItem, Project } from "@/types";
+import { BILLING_TYPES, BILLING_STATUSES, formatPeso, calculateBilling, PH_VAT_RATE, PH_EWT_RATE, PH_RETENTION_RATE } from "@/constants";
+import type { BillingItem, Project, BillingType, BillingStatus } from "@/types";
 import { format } from "date-fns";
 
 export default function BillingPage() {
@@ -25,13 +25,18 @@ export default function BillingPage() {
   const [formData, setFormData] = useState({
     projectId: "",
     invoiceNo: "",
-    billingDate: new Date().toISOString().split("T")[0],
-    billingType: "progress" as const,
+    date: new Date().toISOString().split("T")[0],
+    billingType: "progress" as BillingType,
     description: "",
     baseAmount: 0,
     progressPercent: 0,
-    status: "draft" as const,
+    status: "draft" as BillingStatus,
     notes: "",
+    vat: 0,
+    ewt: 0,
+    retention: 0,
+    netAmount: 0,
+    relatedMilestoneId: null as string | null,
   });
 
   useEffect(() => {
@@ -60,26 +65,36 @@ export default function BillingPage() {
       setFormData({
         projectId: item.projectId,
         invoiceNo: item.invoiceNo,
-        billingDate: item.billingDate,
+        date: item.date,
         billingType: item.billingType,
         description: item.description || "",
         baseAmount: item.baseAmount,
         progressPercent: item.progressPercent || 0,
         status: item.status,
         notes: item.notes || "",
+        vat: item.vat,
+        ewt: item.ewt,
+        retention: item.retention,
+        netAmount: item.netAmount,
+        relatedMilestoneId: item.relatedMilestoneId,
       });
     } else {
       setEditingItem(null);
       setFormData({
         projectId: selectedProject === "all" ? "" : selectedProject,
         invoiceNo: "",
-        billingDate: new Date().toISOString().split("T")[0],
+        date: new Date().toISOString().split("T")[0],
         billingType: "progress",
         description: "",
         baseAmount: 0,
         progressPercent: 0,
         status: "draft",
         notes: "",
+        vat: 0,
+        ewt: 0,
+        retention: 0,
+        netAmount: 0,
+        relatedMilestoneId: null,
       });
     }
     setDialogOpen(true);
@@ -115,7 +130,7 @@ export default function BillingPage() {
 
   const summary = filteredItems.reduce(
     (acc, item) => {
-      const amounts = calculateBillingAmounts(item.baseAmount);
+      const amounts = calculateBilling(item.baseAmount, item.progressPercent || undefined);
       acc.totalBilled += item.baseAmount;
       acc.vat += amounts.vat;
       acc.ewt += amounts.ewt;
@@ -210,8 +225,8 @@ export default function BillingPage() {
                     <Input
                       id="billingDate"
                       type="date"
-                      value={formData.billingDate}
-                      onChange={(e) => setFormData({ ...formData, billingDate: e.target.value })}
+                      value={formData.date}
+                      onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                       required
                     />
                   </div>
@@ -226,8 +241,8 @@ export default function BillingPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {Object.entries(BILLING_TYPES).map(([key, { label }]) => (
-                          <SelectItem key={key} value={key}>
+                        {BILLING_TYPES.map(({ value, label }) => (
+                          <SelectItem key={value} value={value}>
                             {label}
                           </SelectItem>
                         ))}
@@ -274,19 +289,19 @@ export default function BillingPage() {
                   <div className="rounded-lg border p-4 space-y-2 bg-muted/50">
                     <h4 className="font-medium text-sm">Calculated Amounts</h4>
                     {(() => {
-                      const amounts = calculateBillingAmounts(formData.baseAmount);
+                      const amounts = calculateBilling(formData.baseAmount, formData.progressPercent || undefined);
                       return (
                         <div className="grid grid-cols-2 gap-2 text-sm">
                           <div>Base Amount:</div>
-                          <div className="font-medium">{formatCurrency(amounts.baseAmount)}</div>
+                          <div className="font-medium">{formatPeso(amounts.baseAmount)}</div>
                           <div>VAT ({(PH_VAT_RATE * 100).toFixed(0)}%):</div>
-                          <div className="font-medium">{formatCurrency(amounts.vat)}</div>
+                          <div className="font-medium">{formatPeso(amounts.vat)}</div>
                           <div>EWT ({(PH_EWT_RATE * 100).toFixed(0)}%):</div>
-                          <div className="font-medium text-red-600">-{formatCurrency(amounts.ewt)}</div>
+                          <div className="font-medium text-red-600">-{formatPeso(amounts.ewt)}</div>
                           <div>Retention ({(PH_RETENTION_RATE * 100).toFixed(0)}%):</div>
-                          <div className="font-medium text-red-600">-{formatCurrency(amounts.retention)}</div>
+                          <div className="font-medium text-red-600">-{formatPeso(amounts.retention)}</div>
                           <div className="font-bold">Net Payable:</div>
-                          <div className="font-bold text-gold">{formatCurrency(amounts.netAmount)}</div>
+                          <div className="font-bold text-gold">{formatPeso(amounts.netAmount)}</div>
                         </div>
                       );
                     })()}
@@ -303,8 +318,8 @@ export default function BillingPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {Object.entries(BILLING_STATUSES).map(([key, { label }]) => (
-                        <SelectItem key={key} value={key}>
+                      {BILLING_STATUSES.map(({ value, label }) => (
+                        <SelectItem key={value} value={value}>
                           {label}
                         </SelectItem>
                       ))}
@@ -338,25 +353,25 @@ export default function BillingPage() {
           <Card>
             <CardHeader className="pb-3">
               <CardDescription>Total Billed</CardDescription>
-              <CardTitle className="text-2xl text-gold">{formatCurrency(summary.totalBilled)}</CardTitle>
+              <CardTitle className="text-2xl text-gold">{formatPeso(summary.totalBilled)}</CardTitle>
             </CardHeader>
           </Card>
           <Card>
             <CardHeader className="pb-3">
               <CardDescription>VAT (12%)</CardDescription>
-              <CardTitle className="text-2xl">{formatCurrency(summary.vat)}</CardTitle>
+              <CardTitle className="text-2xl">{formatPeso(summary.vat)}</CardTitle>
             </CardHeader>
           </Card>
           <Card>
             <CardHeader className="pb-3">
               <CardDescription>Net Payable</CardDescription>
-              <CardTitle className="text-2xl text-green-600">{formatCurrency(summary.netAmount)}</CardTitle>
+              <CardTitle className="text-2xl text-green-600">{formatPeso(summary.netAmount)}</CardTitle>
             </CardHeader>
           </Card>
           <Card>
             <CardHeader className="pb-3">
               <CardDescription>Outstanding</CardDescription>
-              <CardTitle className="text-2xl text-red-600">{formatCurrency(summary.outstanding)}</CardTitle>
+              <CardTitle className="text-2xl text-red-600">{formatPeso(summary.outstanding)}</CardTitle>
             </CardHeader>
           </Card>
         </div>
@@ -414,7 +429,7 @@ export default function BillingPage() {
                   </TableHeader>
                   <TableBody>
                     {filteredItems.map((item) => {
-                      const amounts = calculateBillingAmounts(item.baseAmount);
+                      const amounts = calculateBilling(item.baseAmount, item.progressPercent || undefined);
                       const project = projects.find((p) => p.id === item.projectId);
                       return (
                         <TableRow key={item.id}>
@@ -422,29 +437,29 @@ export default function BillingPage() {
                           <TableCell>
                             <div className="flex items-center gap-1 text-sm">
                               <Calendar className="h-3 w-3" />
-                              {format(new Date(item.billingDate), "MMM dd, yyyy")}
+                              {format(new Date(item.date), "MMM dd, yyyy")}
                             </div>
                           </TableCell>
                           <TableCell>
                             <Badge variant="outline">
-                              {BILLING_TYPES[item.billingType]?.label || item.billingType}
+                              {BILLING_TYPES.find(t => t.value === item.billingType)?.label || item.billingType}
                             </Badge>
                           </TableCell>
                           <TableCell className="max-w-xs truncate">
                             {item.description || project?.name || "-"}
                           </TableCell>
                           <TableCell className="text-right font-medium">
-                            {formatCurrency(item.baseAmount)}
+                            {formatPeso(item.baseAmount)}
                           </TableCell>
                           <TableCell className="text-right">
-                            {formatCurrency(amounts.vat)}
+                            {formatPeso(amounts.vat)}
                           </TableCell>
                           <TableCell className="text-right font-medium text-green-600">
-                            {formatCurrency(amounts.netAmount)}
+                            {formatPeso(amounts.netAmount)}
                           </TableCell>
                           <TableCell>
                             <Badge className={getStatusColor(item.status)}>
-                              {BILLING_STATUSES[item.status]?.label || item.status}
+                              {BILLING_STATUSES.find(s => s.value === item.status)?.label || item.status}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right">

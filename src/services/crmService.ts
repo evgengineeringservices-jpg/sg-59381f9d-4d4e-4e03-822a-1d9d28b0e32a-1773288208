@@ -437,13 +437,32 @@ export async function deleteDocument(id: string) {
   if (error) throw error;
 }
 
+export async function uploadDocument(projectId: string, category: string, file: File) {
+  const filePath = `${projectId}/${Date.now()}_${file.name}`;
+  const fileUrl = await uploadFile("project-documents", filePath, file);
+  return createDocument({
+    projectId,
+    category: category as DocumentCategory,
+    fileName: file.name,
+    fileUrl,
+    fileSize: file.size,
+    uploadedBy: "system", // Fallback, should be user ID
+    notes: null,
+  });
+}
+
 // ===== DRAWING LOGS =====
-export async function getDrawingLogs(projectId: string) {
-  const { data, error } = await supabase
+export async function getDrawingLogs(projectId?: string) {
+  let query = supabase
     .from("drawing_logs")
     .select("*")
-    .eq("project_id", projectId)
     .order("created_at", { ascending: false });
+    
+  if (projectId) {
+    query = query.eq("project_id", projectId);
+  }
+  
+  const { data, error } = await query;
   
   if (error) throw error;
   return data.map(toCamelCase<DrawingLog>);
@@ -470,6 +489,34 @@ export async function updateDrawingLog(id: string, updates: Partial<DrawingLog>)
   
   if (error) throw error;
   return toCamelCase<DrawingLog>(data);
+}
+
+export async function uploadDrawing(data: { projectId: string; title: string; description: string; version: string; file: File }) {
+  const filePath = `${data.projectId}/${Date.now()}_${data.file.name}`;
+  const fileUrl = await uploadFile("project-drawings", filePath, data.file);
+  return createDrawingLog({
+    projectId: data.projectId,
+    fileName: data.title || data.file.name,
+    fileUrl,
+    fileType: data.file.type,
+    revisionNumber: data.version,
+    status: "uploaded",
+    extractedDimensions: null,
+    extractedQuantities: null,
+    aiSuggestions: null,
+    confidenceScore: null,
+    uploadedBy: "system",
+    notes: data.description,
+  });
+}
+
+export async function deleteDrawing(id: string) {
+  const { error } = await supabase
+    .from("drawing_logs")
+    .delete()
+    .eq("id", id);
+  
+  if (error) throw error;
 }
 
 // ===== MARKET PRICES =====

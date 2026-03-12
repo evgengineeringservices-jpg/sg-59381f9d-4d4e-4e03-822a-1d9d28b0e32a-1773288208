@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { getProjects, getBOQItems, getBillingItems } from "@/services/crmService";
-import { formatCurrency } from "@/constants";
+import { formatPeso } from "@/constants";
 import type { Project, BOQItem, BillingItem } from "@/types";
 
 const COLORS = ["hsl(42 100% 50%)", "hsl(225 35% 15%)", "hsl(210 40% 45%)", "hsl(30 90% 55%)", "hsl(150 50% 45%)"];
@@ -70,7 +70,7 @@ export default function AnalyticsPage() {
   }, [] as { name: string; value: number }[]);
 
   const monthlyCashFlow = billingItems.reduce((acc, item) => {
-    const month = new Date(item.billingDate).toLocaleDateString("en-US", { month: "short", year: "numeric" });
+    const month = new Date(item.date).toLocaleDateString("en-US", { month: "short", year: "numeric" });
     const existing = acc.find((m) => m.month === month);
     const netAmount = item.baseAmount * 1.12 - item.baseAmount * 0.02 - item.baseAmount * 0.10;
     if (existing) {
@@ -132,7 +132,7 @@ export default function AnalyticsPage() {
                         border: "1px solid hsl(var(--border))",
                         borderRadius: "8px",
                       }}
-                      formatter={(value: number) => formatCurrency(value)}
+                      formatter={(value: number) => formatPeso(value)}
                     />
                     <Legend />
                     <Bar dataKey="budget" fill="hsl(42 100% 50%)" name="Budget" />
@@ -184,7 +184,7 @@ export default function AnalyticsPage() {
                         cx="50%"
                         cy="50%"
                         labelLine={false}
-                        label={({ name, value }) => `${name.slice(0, 15)} (${formatCurrency(value)})`}
+                        label={({ name, value }) => `${name.slice(0, 15)} (${formatPeso(value)})`}
                         outerRadius={80}
                         fill="hsl(42 100% 50%)"
                         dataKey="value"
@@ -193,7 +193,7 @@ export default function AnalyticsPage() {
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                      <Tooltip formatter={(value: number) => formatPeso(value)} />
                     </PieChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -217,7 +217,7 @@ export default function AnalyticsPage() {
                         border: "1px solid hsl(var(--border))",
                         borderRadius: "8px",
                       }}
-                      formatter={(value: number) => formatCurrency(value)}
+                      formatter={(value: number) => formatPeso(value)}
                     />
                     <Legend />
                     <Line type="monotone" dataKey="billed" stroke="hsl(42 100% 50%)" strokeWidth={2} name="Billed" />

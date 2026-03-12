@@ -9,12 +9,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Upload, FileText, Trash2, Eye, Sparkles } from "lucide-react";
-import { getDrawings, uploadDrawing, deleteDrawing, getProjects } from "@/services/crmService";
-import type { Drawing, Project } from "@/types";
+import { getDrawingLogs, uploadDrawing, deleteDrawing, getProjects } from "@/services/crmService";
+import type { DrawingLog, Project } from "@/types";
 import { format } from "date-fns";
 
 export default function DrawingsPage() {
-  const [drawings, setDrawings] = useState<Drawing[]>([]);
+  const [drawings, setDrawings] = useState<DrawingLog[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>("all");
   const [loading, setLoading] = useState(true);
@@ -36,7 +36,7 @@ export default function DrawingsPage() {
     setLoading(true);
     try {
       const [drawingsData, projectsData] = await Promise.all([
-        getDrawings(selectedProject === "all" ? undefined : selectedProject),
+        getDrawingLogs(selectedProject === "all" ? undefined : selectedProject),
         getProjects(),
       ]);
       setDrawings(drawingsData);
@@ -264,9 +264,9 @@ export default function DrawingsPage() {
                         <CardDescription className="flex items-center gap-2 text-sm">
                           {project && <span>{project.name}</span>}
                           <span>•</span>
-                          <span>v{drawing.version}</span>
+                          <span>v{drawing.revisionNumber}</span>
                           <span>•</span>
-                          <span>{format(new Date(drawing.uploadedAt), "MMM dd, yyyy")}</span>
+                          <span>{format(new Date(drawing.createdAt), "MMM dd, yyyy")}</span>
                         </CardDescription>
                       </div>
                       <div className="flex items-center gap-2">
@@ -284,12 +284,12 @@ export default function DrawingsPage() {
                       </div>
                     </div>
                   </CardHeader>
-                  {(drawing.description || drawing.extractedData) && (
+                  {(drawing.notes || drawing.extractedQuantities) && (
                     <CardContent>
-                      {drawing.description && (
-                        <p className="text-sm text-muted-foreground mb-4">{drawing.description}</p>
+                      {drawing.notes && (
+                        <p className="text-sm text-muted-foreground mb-4">{drawing.notes}</p>
                       )}
-                      {drawing.extractedData && drawing.status === "needs_review" && (
+                      {drawing.extractedQuantities && drawing.status === "needs_review" && (
                         <div className="rounded-lg border p-4 bg-yellow-50 dark:bg-yellow-950/20">
                           <div className="flex items-start gap-2 mb-2">
                             <Sparkles className="h-5 w-5 text-yellow-600 dark:text-yellow-500 mt-0.5" />
@@ -307,7 +307,7 @@ export default function DrawingsPage() {
                           </Button>
                         </div>
                       )}
-                      {drawing.extractedData && drawing.status === "approved" && (
+                      {drawing.extractedQuantities && drawing.status === "approved" && (
                         <div className="rounded-lg border p-4 bg-green-50 dark:bg-green-950/20">
                           <p className="text-sm text-green-900 dark:text-green-200">
                             ✓ Drawing validated and quantities added to BOQ
