@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { Plus, RefreshCw, TrendingUp, DollarSign, Wrench, Package } from "lucide-react";
+import { Plus, RefreshCw, TrendingUp, DollarSign, Wrench, Package, Search, SlidersHorizontal, ArrowUpDown } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -11,6 +12,13 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { formatPeso } from "@/lib/boqCalculations";
 import {
@@ -25,12 +33,29 @@ import { BOQItemDialog } from "@/components/boq/BOQItemDialog";
 import type { Project, BOQItem } from "@/types";
 import { BOQ_CATEGORIES } from "@/constants";
 
+type SortField = "itemNo" | "description" | "category" | "quantity" | "materialCost" | "laborCost" | "total";
+type SortDirection = "asc" | "desc";
+type ViewMode = "flat" | "grouped";
+
 export default function BOQPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>("");
   const [items, setItems] = useState<BOQItem[]>([]);
   const [filteredItems, setFilteredItems] = useState<BOQItem[]>([]);
+  
+  // Filter states
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [minCost, setMinCost] = useState<string>("");
+  const [maxCost, setMaxCost] = useState<string>("");
+  
+  // Sort states
+  const [sortField, setSortField] = useState<SortField>("itemNo");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  
+  // View states
+  const [viewMode, setViewMode] = useState<ViewMode>("flat");
+  
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<BOQItem | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -49,8 +74,8 @@ export default function BOQPage() {
   }, [selectedProject]);
 
   useEffect(() => {
-    filterItems();
-  }, [selectedCategory, items]);
+    applyFiltersAndSort();
+  }, [selectedCategory, searchQuery, minCost, maxCost, sortField, sortDirection, items]);
 
   async function loadProjects() {
     try {
@@ -90,12 +115,102 @@ export default function BOQPage() {
     }
   }
 
-  function filterItems() {
-    if (selectedCategory === "all") {
-      setFilteredItems(items);
-    } else {
-      setFilteredItems(items.filter((item) => item.category === selectedCategory));
+  function applyFiltersAndSort() {
+    let filtered = [...items];
+
+    // Apply category filter
+    if (selectedCategory !== "all") {
+      filtered = filtered.filter((item) => item.category === selectedCategory);
     }
+
+    // Apply search query
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (item) =>
+          item.description.toLowerCase().includes(query) ||
+          item.itemNo.toLowerCase().includes(query) ||
+          (item.dpwhItemCode && item.dpwhItemCode.toLowerCase().includes(query))
+      );
+    }
+
+    // Apply cost range filter
+    if (minCost) {
+      const min = parseFloat(minCost);
+      filtered = filtered.filter((item) => item.total >= min);
+    }
+    if (maxCost) {
+      const max = parseFloat(maxCost);
+      filtered = filtered.filter((item) => item.total <= max);
+    }
+
+    // Apply sorting
+    filtered.sort((a, b) => {
+      let aVal: any;
+      let bVal: any;
+
+      switch (sortField) {
+        case "itemNo":
+          aVal = a.itemNo;
+          bVal = b.itemNo;
+          break;
+        case "description":
+          aVal = a.description;
+          bVal = b.description;
+          break;
+        case "category":
+          aVal = a.category;
+          bVal = b.category;
+          break;
+        case "quantity":
+          aVal = a.quantity;
+          bVal = b.quantity;
+          break;
+        case "materialCost":
+          aVal = a.materialCost;
+          bVal = b.materialCost;
+          break;
+        case "laborCost":
+          aVal = a.laborCost;
+          bVal = b.laborCost;
+          break;
+        case "total":
+          aVal = a.total;
+          bVal = b.total;
+          break;
+        default:
+          aVal = a.itemNo;
+          bVal = b.itemNo;
+      }
+
+      if (typeof aVal === "string") {
+        return sortDirection === "asc"
+          ? aVal.localeCompare(bVal)
+          : bVal.localeCompare(aVal);
+      } else {
+        return sortDirection === "asc" ? aVal - bVal : bVal - aVal;
+      }
+    });
+
+    setFilteredItems(filtered);
+  }
+
+  function handleSort(field: SortField) {
+    if (sortField === field) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  }
+
+  function clearFilters() {
+    setSearchQuery("");
+    setSelectedCategory("all");
+    setMinCost("");
+    setMaxCost("");
+    setSortField("itemNo");
+    setSortDirection("asc");
   }
 
   async function handleSave(data: Partial<BOQItem>) {
@@ -164,6 +279,21 @@ export default function BOQPage() {
 
   const significantChanges = priceChanges.filter((c) => Math.abs(c.priceChangePercent) > 10);
 
+  // Group items by category for grouped view
+  const groupedItems = filteredItems.reduce((acc, item) => {
+    if (!acc[item.category]) {
+      acc[item.category] = [];
+    }
+    acc[item.category].push(item);
+    return acc;
+  }, {} as Record<string, BOQItem[]>);
+
+  const activeFiltersCount = 
+    (selectedCategory !== "all" ? 1 : 0) +
+    (searchQuery ? 1 : 0) +
+    (minCost ? 1 : 0) +
+    (maxCost ? 1 : 0);
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -226,22 +356,6 @@ export default function BOQPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex-1">
-              <label className="text-sm font-medium mb-2 block">Filter by Category</label>
-              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  {BOQ_CATEGORIES.map((cat) => (
-                    <SelectItem key={cat.value} value={cat.value}>
-                      {cat.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
           </div>
         </CardContent>
       </Card>
@@ -293,10 +407,91 @@ export default function BOQPage() {
               <div className="text-2xl font-bold">{filteredItems.length}</div>
               <p className="text-xs text-muted-foreground mt-1">
                 {selectedCategory === "all" ? "All categories" : BOQ_CATEGORIES.find(c => c.value === selectedCategory)?.label}
+                {activeFiltersCount > 0 && ` • ${activeFiltersCount} filter${activeFiltersCount > 1 ? 's' : ''} active`}
               </p>
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* Filters and Controls */}
+      {selectedProject && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg">Filters & View Options</CardTitle>
+              <div className="flex items-center gap-2">
+                <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
+                  <TabsList>
+                    <TabsTrigger value="flat">Flat List</TabsTrigger>
+                    <TabsTrigger value="grouped">Grouped</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+                {activeFiltersCount > 0 && (
+                  <Button variant="ghost" size="sm" onClick={clearFilters}>
+                    Clear Filters
+                  </Button>
+                )}
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {/* Search */}
+              <div className="space-y-2">
+                <Label>Search</Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Item, code, description..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+
+              {/* Category Filter */}
+              <div className="space-y-2">
+                <Label>Category</Label>
+                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    {BOQ_CATEGORIES.map((cat) => (
+                      <SelectItem key={cat.value} value={cat.value}>
+                        {cat.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Cost Range */}
+              <div className="space-y-2">
+                <Label>Min Cost</Label>
+                <Input
+                  type="number"
+                  placeholder="₱0"
+                  value={minCost}
+                  onChange={(e) => setMinCost(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Max Cost</Label>
+                <Input
+                  type="number"
+                  placeholder="₱999,999"
+                  value={maxCost}
+                  onChange={(e) => setMaxCost(e.target.value)}
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* BOQ Table */}
@@ -305,30 +500,67 @@ export default function BOQPage() {
           <CardHeader>
             <CardTitle>BOQ Items</CardTitle>
             <CardDescription>
-              {selectedCategory === "all"
-                ? "All BOQ items"
-                : `Filtered by ${BOQ_CATEGORIES.find(c => c.value === selectedCategory)?.label}`}
+              {viewMode === "grouped" ? "Grouped by category" : "Flat list view"}
+              {` • ${filteredItems.length} item${filteredItems.length !== 1 ? 's' : ''}`}
             </CardDescription>
           </CardHeader>
           <CardContent>
             {filteredItems.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
-                No BOQ items found. Add your first item to get started.
+                {items.length === 0 
+                  ? "No BOQ items found. Add your first item to get started."
+                  : "No items match your filters. Try adjusting your search criteria."}
               </div>
-            ) : (
+            ) : viewMode === "flat" ? (
+              // Flat list view
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead className="border-b">
                     <tr className="text-left text-sm text-muted-foreground">
-                      <th className="pb-3 font-medium">Item No</th>
+                      <th className="pb-3 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort("itemNo")}>
+                        <div className="flex items-center gap-1">
+                          Item No
+                          <ArrowUpDown className="h-3 w-3" />
+                        </div>
+                      </th>
                       <th className="pb-3 font-medium">DPWH Code</th>
-                      <th className="pb-3 font-medium">Description</th>
-                      <th className="pb-3 font-medium">Category</th>
-                      <th className="pb-3 font-medium text-right">Qty</th>
+                      <th className="pb-3 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort("description")}>
+                        <div className="flex items-center gap-1">
+                          Description
+                          <ArrowUpDown className="h-3 w-3" />
+                        </div>
+                      </th>
+                      <th className="pb-3 font-medium cursor-pointer hover:text-foreground" onClick={() => handleSort("category")}>
+                        <div className="flex items-center gap-1">
+                          Category
+                          <ArrowUpDown className="h-3 w-3" />
+                        </div>
+                      </th>
+                      <th className="pb-3 font-medium text-right cursor-pointer hover:text-foreground" onClick={() => handleSort("quantity")}>
+                        <div className="flex items-center justify-end gap-1">
+                          Qty
+                          <ArrowUpDown className="h-3 w-3" />
+                        </div>
+                      </th>
                       <th className="pb-3 font-medium">Unit</th>
-                      <th className="pb-3 font-medium text-right">Material</th>
-                      <th className="pb-3 font-medium text-right">Labor</th>
-                      <th className="pb-3 font-medium text-right">Total</th>
+                      <th className="pb-3 font-medium text-right cursor-pointer hover:text-foreground" onClick={() => handleSort("materialCost")}>
+                        <div className="flex items-center justify-end gap-1">
+                          Material
+                          <ArrowUpDown className="h-3 w-3" />
+                        </div>
+                      </th>
+                      <th className="pb-3 font-medium text-right cursor-pointer hover:text-foreground" onClick={() => handleSort("laborCost")}>
+                        <div className="flex items-center justify-end gap-1">
+                          Labor
+                          <ArrowUpDown className="h-3 w-3" />
+                        </div>
+                      </th>
+                      <th className="pb-3 font-medium text-right cursor-pointer hover:text-foreground" onClick={() => handleSort("total")}>
+                        <div className="flex items-center justify-end gap-1">
+                          Total
+                          <ArrowUpDown className="h-3 w-3" />
+                        </div>
+                      </th>
                       <th className="pb-3 font-medium text-right">Actions</th>
                     </tr>
                   </thead>
@@ -396,6 +628,99 @@ export default function BOQPage() {
                     </tr>
                   </tfoot>
                 </table>
+              </div>
+            ) : (
+              // Grouped view
+              <div className="space-y-6">
+                {Object.entries(groupedItems).map(([category, categoryItems]) => {
+                  const categoryMaterial = categoryItems.reduce((sum, item) => sum + item.materialCost, 0);
+                  const categoryLabor = categoryItems.reduce((sum, item) => sum + item.laborCost, 0);
+                  const categoryTotal = categoryMaterial + categoryLabor;
+
+                  return (
+                    <div key={category} className="border rounded-lg overflow-hidden">
+                      <div className="bg-accent/50 px-4 py-3 border-b">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <h3 className="font-semibold">
+                              {BOQ_CATEGORIES.find(c => c.value === category)?.label || category}
+                            </h3>
+                            <Badge variant="secondary">{categoryItems.length} items</Badge>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-lg font-bold text-primary">
+                              {formatPeso(categoryTotal)}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              Material: {formatPeso(categoryMaterial)} • Labor: {formatPeso(categoryLabor)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead className="border-b bg-muted/30">
+                            <tr className="text-left text-xs text-muted-foreground">
+                              <th className="p-3 font-medium">Item No</th>
+                              <th className="p-3 font-medium">Description</th>
+                              <th className="p-3 font-medium text-right">Qty</th>
+                              <th className="p-3 font-medium">Unit</th>
+                              <th className="p-3 font-medium text-right">Material</th>
+                              <th className="p-3 font-medium text-right">Labor</th>
+                              <th className="p-3 font-medium text-right">Total</th>
+                              <th className="p-3 font-medium text-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {categoryItems.map((item) => (
+                              <tr key={item.id} className="border-b hover:bg-accent/30">
+                                <td className="p-3 font-medium text-sm">{item.itemNo}</td>
+                                <td className="p-3">
+                                  <div className="font-medium text-sm">{item.description}</div>
+                                  {item.dpwhItemCode && (
+                                    <div className="text-xs text-muted-foreground">{item.dpwhItemCode}</div>
+                                  )}
+                                </td>
+                                <td className="p-3 text-right text-sm">{item.quantity}</td>
+                                <td className="p-3 text-sm">{item.unit}</td>
+                                <td className="p-3 text-right text-sm font-medium">
+                                  {formatPeso(item.materialCost)}
+                                </td>
+                                <td className="p-3 text-right text-sm font-medium">
+                                  {formatPeso(item.laborCost)}
+                                </td>
+                                <td className="p-3 text-right font-bold text-primary text-sm">
+                                  {formatPeso(item.total)}
+                                </td>
+                                <td className="p-3 text-right">
+                                  <div className="flex justify-end gap-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        setEditingItem(item);
+                                        setDialogOpen(true);
+                                      }}
+                                    >
+                                      Edit
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleDelete(item.id)}
+                                    >
+                                      Delete
+                                    </Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </CardContent>

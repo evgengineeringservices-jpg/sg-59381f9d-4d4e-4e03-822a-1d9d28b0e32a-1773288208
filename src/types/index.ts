@@ -386,3 +386,27 @@ export interface TaskProfitAnalysis {
   recommendation: string;
   createdAt: string;
 }
+
+export interface Notification {
+  id: string;
+  userId: string;
+  type:
+    | "price_change"
+    | "task_assigned"
+    | "billing_ready"
+    | "milestone_complete"
+    | "document_uploaded"
+    | "drawing_analyzed"
+    | "budget_alert"
+    | "timeline_delay"
+    | "approval_needed"
+    | "system_alert";
+  title: string;
+  message: string;
+  severity: "info" | "warning" | "error" | "success";
+  link?: string;
+  isRead: boolean;
+  metadata?: Record<string, any>;
+  createdAt: string;
+  readAt?: string;
+}
