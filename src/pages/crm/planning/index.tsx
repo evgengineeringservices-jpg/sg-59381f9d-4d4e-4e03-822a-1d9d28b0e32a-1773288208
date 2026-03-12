@@ -31,7 +31,8 @@ import {
   deletePlanningPhase,
   getBOQItems
 } from "@/services/crmService";
-import { Plus, Edit2, Trash2, Calendar, TrendingUp, GanttChart, Sparkles, Loader2, RefreshCw } from "lucide-react";
+import { Plus, Edit2, Trash2, Calendar, TrendingUp, GanttChart, Sparkles, Loader2, RefreshCw, Download, FileText, FileSpreadsheet } from "lucide-react";
+import { GanttChart } from "@/components/planning/GanttChart";
 import type { Project, PlanningPhase, Role } from "@/types";
 
 export default function PlanningPage() {
@@ -159,6 +160,107 @@ export default function PlanningPage() {
       console.error("Error deleting phase:", error);
     }
   }
+
+  const handlePhaseDateChange = async (phaseId: string, newStartDate: Date, newEndDate: Date) => {
+    try {
+      await updatePlanningPhase(phaseId, {
+        startDate: newStartDate.toISOString(),
+        endDate: newEndDate.toISOString(),
+      });
+      await loadPhases();
+      toast({
+        title: "Phase updated",
+        description: "Phase dates have been updated successfully.",
+      });
+    } catch (error) {
+      console.error("Error updating phase:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update phase dates",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const exportToPDF = async () => {
+    const { jsPDF } = await import("jspdf");
+    await import("jspdf-autotable");
+    
+    const doc = new jsPDF() as any;
+    
+    // Title
+    doc.setFontSize(18);
+    doc.text("Project Schedule", 14, 20);
+    
+    // Project info
+    const project = projects.find(p => p.id === selectedProject);
+    if (project) {
+      doc.setFontSize(12);
+      doc.text(`Project: ${project.name}`, 14, 30);
+      doc.text(`Client: ${project.client}`, 14, 37);
+    }
+    
+    // Table
+    const tableData = phases.map(phase => [
+      phase.name,
+      phase.status.replace("_", " "),
+      new Date(phase.startDate).toLocaleDateString(),
+      new Date(phase.endDate).toLocaleDateString(),
+      `${phase.progress}%`,
+      phase.assignedRole || "-",
+      phase.isMilestone ? "Yes" : "No",
+    ]);
+    
+    doc.autoTable({
+      startY: 45,
+      head: [["Phase", "Status", "Start Date", "End Date", "Progress", "Role", "Milestone"]],
+      body: tableData,
+      theme: "grid",
+      headStyles: { fillColor: [31, 41, 55] },
+    });
+    
+    doc.save(`project-schedule-${Date.now()}.pdf`);
+    
+    toast({
+      title: "Exported to PDF",
+      description: "Project schedule has been exported successfully.",
+    });
+  };
+
+  const exportToExcel = async () => {
+    const XLSX = await import("xlsx");
+    
+    const project = projects.find(p => p.id === selectedProject);
+    
+    const worksheetData = [
+      ["Project Schedule"],
+      [`Project: ${project?.name || "N/A"}`],
+      [`Client: ${project?.client || "N/A"}`],
+      [],
+      ["Phase Name", "Status", "Start Date", "End Date", "Progress", "Assigned Role", "Milestone", "Billing Trigger"],
+      ...phases.map(phase => [
+        phase.name,
+        phase.status.replace("_", " "),
+        new Date(phase.startDate).toLocaleDateString(),
+        new Date(phase.endDate).toLocaleDateString(),
+        `${phase.progress}%`,
+        phase.assignedRole || "-",
+        phase.isMilestone ? "Yes" : "No",
+        phase.isBillingTrigger ? "Yes" : "No",
+      ]),
+    ];
+    
+    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Schedule");
+    
+    XLSX.writeFile(workbook, `project-schedule-${Date.now()}.xlsx`);
+    
+    toast({
+      title: "Exported to Excel",
+      description: "Project schedule has been exported successfully.",
+    });
+  };
 
   const handleGenerateSchedule = async () => {
     if (!selectedProject) {
@@ -392,164 +494,32 @@ export default function PlanningPage() {
             <p className="text-muted-foreground">Timeline and milestone management</p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 border rounded-lg p-1">
-              <Button
-                variant={viewMode === "list" ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setViewMode("list")}
-              >
-                List
-              </Button>
-              <Button
-                variant={viewMode === "gantt" ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setViewMode("gantt")}
-              >
-                Gantt
-              </Button>
-            </div>
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-              <DialogTrigger asChild>
-                <Button onClick={() => handleOpenDialog()} className="bg-accent hover:bg-accent/90 text-accent-foreground">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Phase
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>{editingPhase ? "Edit Phase" : "Add Phase"}</DialogTitle>
-                  <DialogDescription>
-                    {editingPhase ? "Update phase details" : "Add a new project phase"}
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Phase Name *</Label>
-                    <Input
-                      id="name"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="Mobilization & Site Preparation"
-                    />
-                  </div>
+            <Button
+              variant="outline"
+              onClick={exportToPDF}
+              disabled={!selectedProject || phases.length === 0}
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              Export PDF
+            </Button>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="startDate">Start Date *</Label>
-                      <Input
-                        id="startDate"
-                        type="date"
-                        value={formData.startDate}
-                        onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="endDate">End Date *</Label>
-                      <Input
-                        id="endDate"
-                        type="date"
-                        value={formData.endDate}
-                        onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                      />
-                    </div>
-                  </div>
+            <Button
+              variant="outline"
+              onClick={exportToExcel}
+              disabled={!selectedProject || phases.length === 0}
+            >
+              <FileSpreadsheet className="h-4 w-4 mr-2" />
+              Export Excel
+            </Button>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="status">Status *</Label>
-                      <Select
-                        value={formData.status}
-                        onValueChange={(value) => setFormData({ ...formData, status: value as any })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="not_started">Not Started</SelectItem>
-                          <SelectItem value="in_progress">In Progress</SelectItem>
-                          <SelectItem value="completed">Completed</SelectItem>
-                          <SelectItem value="delayed">Delayed</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="progress">Progress %</Label>
-                      <Input
-                        id="progress"
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={formData.progress}
-                        onChange={(e) => setFormData({ ...formData, progress: parseFloat(e.target.value) })}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="dependencies">Dependencies</Label>
-                      <Input
-                        id="dependencies"
-                        value={formData.dependencies}
-                        onChange={(e) => setFormData({ ...formData, dependencies: e.target.value })}
-                        placeholder="Phase IDs (comma-separated)"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="assignedRole">Assigned Role</Label>
-                      <Input
-                        id="assignedRole"
-                        value={formData.assignedRole}
-                        onChange={(e) => setFormData({ ...formData, assignedRole: e.target.value })}
-                        placeholder="Project Engineer"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-6">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        id="isMilestone"
-                        checked={formData.isMilestone}
-                        onChange={(e) => setFormData({ ...formData, isMilestone: e.target.checked })}
-                        className="w-4 h-4"
-                      />
-                      <Label htmlFor="isMilestone">Milestone</Label>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        id="isBillingTrigger"
-                        checked={formData.isBillingTrigger}
-                        onChange={(e) => setFormData({ ...formData, isBillingTrigger: e.target.checked })}
-                        className="w-4 h-4"
-                      />
-                      <Label htmlFor="isBillingTrigger">Billing Trigger</Label>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="notes">Notes</Label>
-                    <Textarea
-                      id="notes"
-                      value={formData.notes}
-                      onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                      placeholder="Additional phase details..."
-                      rows={3}
-                    />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button onClick={handleSubmit} className="bg-accent hover:bg-accent/90 text-accent-foreground">
-                    {editingPhase ? "Update Phase" : "Add Phase"}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+            <Button
+              variant="outline"
+              onClick={() => setViewMode(viewMode === "list" ? "gantt" : "list")}
+              disabled={!selectedProject}
+            >
+              {viewMode === "list" ? <GanttChart className="h-4 w-4 mr-2" /> : <Calendar className="h-4 w-4 mr-2" />}
+              {viewMode === "list" ? "Gantt View" : "List View"}
+            </Button>
           </div>
         </div>
 
@@ -591,18 +561,19 @@ export default function PlanningPage() {
           </Button>
         </div>
 
-        {phases.length === 0 ? (
-          <Card className="shadow-card">
-            <CardContent className="flex flex-col items-center justify-center py-16">
-              <div className="text-muted-foreground mb-4">No phases defined</div>
-              <Button onClick={() => handleOpenDialog()} className="bg-accent hover:bg-accent/90 text-accent-foreground">
-                <Plus className="w-4 h-4 mr-2" />
-                Add Your First Phase
-              </Button>
-            </CardContent>
-          </Card>
-        ) : viewMode === "list" ? (
-          <div className="space-y-4">
+        {/* Phases Display */}
+        {loading ? (
+          <div>Loading phases...</div>
+        ) : phases.length === 0 ? (
+          <div>No phases found...</div>
+        ) : viewMode === "gantt" ? (
+          <GanttChart 
+            phases={phases}
+            onPhaseClick={(phase) => setEditingPhase(phase)}
+            onPhaseDateChange={handlePhaseDateChange}
+          />
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {phases.map((phase) => (
               <Card key={phase.id} className="shadow-card hover:shadow-premium transition-shadow">
                 <CardContent className="p-6">
@@ -680,17 +651,6 @@ export default function PlanningPage() {
               </Card>
             ))}
           </div>
-        ) : (
-          <Card className="shadow-card">
-            <CardHeader>
-              <CardTitle>Gantt Chart</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-12 text-muted-foreground">
-                Gantt chart visualization coming soon
-              </div>
-            </CardContent>
-          </Card>
         )}
       </div>
     </CRMLayout>
