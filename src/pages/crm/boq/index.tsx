@@ -250,8 +250,8 @@ export default function BOQPage() {
                       </SelectTrigger>
                       <SelectContent>
                         {DPWH_UNITS.map((unit) => (
-                          <SelectItem key={unit} value={unit}>
-                            {unit}
+                          <SelectItem key={unit.value} value={unit.value}>
+                            {unit.label || unit.value}
                           </SelectItem>
                         ))}
                       </SelectContent>
