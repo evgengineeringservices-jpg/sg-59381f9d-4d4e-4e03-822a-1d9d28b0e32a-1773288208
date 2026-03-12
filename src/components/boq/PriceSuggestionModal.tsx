@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { getMarketPriceSuggestions, formatPeso } from "@/lib/boqCalculations";
+import Link from "next/link";
 
 interface PriceSuggestionModalProps {
   open: boolean;
@@ -128,9 +129,9 @@ export function PriceSuggestionModal({
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
               No matching market prices found. Try different keywords or{" "}
-              <a href="/crm/admin/market-prices" className="underline font-medium">
+              <Link href="/crm/admin/market-prices" className="underline font-medium">
                 add market prices manually
-              </a>.
+              </Link>.
             </AlertDescription>
           </Alert>
         )}
@@ -191,9 +192,9 @@ export function PriceSuggestionModal({
         <div className="pt-4 border-t">
           <p className="text-sm text-muted-foreground mb-2">
             Can't find the right price?{" "}
-            <a href="/crm/admin/market-prices" className="underline font-medium text-primary">
+            <Link href="/crm/admin/market-prices" className="underline font-medium text-primary">
               Add new market price
-            </a>{" "}
+            </Link>{" "}
             or enter manually in the form.
           </p>
         </div>

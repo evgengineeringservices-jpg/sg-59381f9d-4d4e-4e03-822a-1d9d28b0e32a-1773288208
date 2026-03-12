@@ -25,6 +25,7 @@ import { BOQ_CATEGORIES, DPWH_UNITS } from "@/constants";
 import { autoCalculateBOQItem, formatPeso } from "@/lib/boqCalculations";
 import { PriceSuggestionModal } from "./PriceSuggestionModal";
 import type { BOQItem } from "@/types";
+import Link from "next/link";
 
 interface BOQItemDialogProps {
   open: boolean;
@@ -391,9 +392,9 @@ export function BOQItemDialog({
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
                     No matching market prices found. Switch to manual mode or{" "}
-                    <a href="/crm/admin/market-prices" className="underline font-medium">
+                    <Link href="/crm/admin/market-prices" className="underline font-medium">
                       add market prices
-                    </a>.
+                    </Link>.
                   </AlertDescription>
                 </Alert>
               </div>
