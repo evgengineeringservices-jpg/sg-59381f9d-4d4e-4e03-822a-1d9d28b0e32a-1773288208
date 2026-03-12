@@ -52,7 +52,13 @@ export default function LogisticsPage() {
   const loadWeeklyForecasts = async () => {
     try {
       setLoading(true);
-      const result = await generateWeeklyMaterialsForecast(selectedProject);
+      
+      // Calculate date range: 12 weeks from today
+      const startDate = new Date();
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + (12 * 7)); // 12 weeks ahead
+      
+      const result = await generateWeeklyMaterialsForecast(selectedProject, startDate, endDate);
       
       if (result && result.length > 0) {
         setForecasts(result);
