@@ -26,10 +26,11 @@ import { getProjects, createProject, updateProject, deleteProject } from "@/serv
 import { formatPeso, PROJECT_TYPES, PCAB_CATEGORIES, PROJECT_STATUS, PERMIT_STATUS } from "@/constants";
 import { Plus, Search, Edit2, Trash2, MapPin, Calendar, DollarSign, Edit, FolderKanban, FileSpreadsheet, Printer } from "lucide-react";
 import type { Project, ProjectStatus, ProjectType, PCabCategory, PermitStatus } from "@/types";
-import { toast } from "@/sonnerie";
+import { useToast } from "@/hooks/use-toast";
 import { exportProjectsToExcel, printElement } from "@/lib/exportUtils";
 
 export default function ProjectsPage() {
+  const { toast } = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
   const [filteredProjects, setFilteredProjects] = useState<Project[]>([]);
   const [searchQuery, setSearchQuery] = useState("");

@@ -274,22 +274,22 @@ export default function BOQPage() {
   }
 
   const handleExport = () => {
-    if (!selectedProject || boqItems.length === 0) {
+    if (!selectedProject || items.length === 0) {
       toast({ title: "No data to export", variant: "destructive" });
       return;
     }
     const project = projects.find(p => p.id === selectedProject);
-    exportBOQToExcel(boqItems, project?.name || "Project");
+    exportBOQToExcel(items, project?.name || "Project");
     toast({ title: "Exported to Excel successfully!" });
   };
 
   const handlePrint = () => {
-    if (!selectedProject || boqItems.length === 0) {
+    if (!selectedProject || items.length === 0) {
       toast({ title: "No data to print", variant: "destructive" });
       return;
     }
     const project = projects.find(p => p.id === selectedProject);
-    printBOQ(boqItems, project?.name || "Project");
+    printBOQ(items, project?.name || "Project");
   };
 
   // Calculate summary
@@ -330,7 +330,7 @@ export default function BOQPage() {
               variant="outline"
               size="sm"
               onClick={handleExport}
-              disabled={!selectedProject || boqItems.length === 0}
+              disabled={!selectedProject || items.length === 0}
             >
               <FileSpreadsheet className="w-4 h-4 mr-2" />
               Export to Excel
@@ -339,7 +339,7 @@ export default function BOQPage() {
               variant="outline"
               size="sm"
               onClick={handlePrint}
-              disabled={!selectedProject || boqItems.length === 0}
+              disabled={!selectedProject || items.length === 0}
             >
               <Printer className="w-4 h-4 mr-2" />
               Print BOQ

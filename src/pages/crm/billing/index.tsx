@@ -15,9 +15,10 @@ import { BILLING_TYPES, BILLING_STATUSES, formatPeso, PH_VAT_RATE, PH_EWT_RATE, 
 import type { BillingItem, Project, BillingType, BillingStatus } from "@/types";
 import { format } from "date-fns";
 import { exportBillingToExcel, printElement } from "@/lib/exportUtils";
-import { toast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 
 export default function BillingPage() {
+  const { toast } = useToast();
   const [billingItems, setBillingItems] = useState<BillingItem[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>("all");

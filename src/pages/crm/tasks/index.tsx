@@ -27,9 +27,10 @@ import { Plus, Search, Trash2, AlertCircle, CheckCircle2, Clock, Edit, Sparkles,
 import { cn } from "@/lib/utils";
 import type { Project, Task, TaskStatus, TaskPriority } from "@/types";
 import { exportTasksToExcel, printElement } from "@/lib/exportUtils";
-import { toast } from "@/sonnerie";
+import { useToast } from "@/hooks/use-toast";
 
 export default function TasksPage() {
+  const { toast } = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [filteredTasks, setFilteredTasks] = useState<Task[]>([]);

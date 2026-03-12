@@ -11,7 +11,7 @@ import { getProjects } from "@/services/crmService";
 import { generateWeeklyMaterialsForecast } from "@/lib/projectAutomation";
 import type { Project } from "@/types";
 import { exportWeeklyLogisticsToExcel } from "@/lib/exportUtils";
-import { toast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { RefreshCw } from "lucide-react";
 
@@ -28,6 +28,7 @@ interface WeeklyForecast {
 }
 
 export default function LogisticsPage() {
+  const { toast } = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>("");
   const [forecasts, setForecasts] = useState<WeeklyForecast[]>([]);
