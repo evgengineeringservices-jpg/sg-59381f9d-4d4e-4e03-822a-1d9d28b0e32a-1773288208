@@ -691,16 +691,21 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      calculate_labor_cost: {
-        Args: {
-          p_category: string
-          p_labor_mode?: string
-          p_material_cost: number
-          p_quantity: number
-          p_unit: string
-        }
-        Returns: number
-      }
+      calculate_labor_cost:
+        | {
+            Args: {
+              p_category: string
+              p_labor_mode?: string
+              p_material_cost: number
+              p_quantity: number
+              p_unit: string
+            }
+            Returns: number
+          }
+        | {
+            Args: { p_labor_percentage?: number; p_material_cost: number }
+            Returns: number
+          }
       calculate_material_cost: {
         Args: {
           p_category: string
@@ -711,10 +716,10 @@ export type Database = {
         Returns: number
       }
       check_market_price_changes: {
-        Args: { p_days_ago?: number }
+        Args: { p_days_back?: number }
         Returns: {
-          affected_projects: number
           category: string
+          days_between: number
           item_name: string
           new_price: number
           old_price: number
@@ -757,33 +762,37 @@ export type Database = {
       get_boq_summary: {
         Args: { p_project_id: string }
         Returns: {
-          cost_by_category: Json
-          total_cost: number
-          total_items: number
+          category: string
+          category_total_cost: number
+          item_count: number
           total_labor_cost: number
           total_material_cost: number
         }[]
       }
       get_current_market_price: {
-        Args: { p_category?: string; p_item_name: string }
-        Returns: number
+        Args: { p_category?: string; p_item_name: string; p_unit?: string }
+        Returns: {
+          date_recorded: string
+          item_name: string
+          location: string
+          price: number
+          supplier: string
+        }[]
       }
-      recalculate_project_boq_costs: {
+      refresh_boq_costs_from_market: {
         Args: { p_project_id: string }
         Returns: {
-          cost_increase: number
-          items_updated: number
-          new_total: number
-          old_total: number
+          total_cost_change: number
+          updated_count: number
         }[]
       }
       suggest_market_prices_for_boq: {
         Args: { p_category: string; p_description: string; p_unit: string }
         Returns: {
-          date: string
+          date_recorded: string
           item_name: string
           location: string
-          notes: string
+          match_score: number
           price: number
           supplier: string
         }[]

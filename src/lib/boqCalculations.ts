@@ -34,7 +34,7 @@ export async function getCurrentMarketPrice(
     p_unit: unit || null,
   });
 
-  if (error || !data || data.length === 0) {
+  if (error || !data || !Array.isArray(data) || data.length === 0) {
     console.error("Error fetching market price:", error);
     return null;
   }
@@ -117,7 +117,7 @@ export async function getBOQSummary(projectId: string): Promise<Array<{
     category: item.category,
     totalMaterialCost: Number(item.total_material_cost),
     totalLaborCost: Number(item.total_labor_cost),
-    totalCost: Number(item.total_cost),
+    totalCost: Number(item.category_total_cost),
     itemCount: Number(item.item_count),
   }));
 }
@@ -168,7 +168,7 @@ export async function refreshBOQCostsFromMarket(projectId: string): Promise<{
     return null;
   }
 
-  if (!data || data.length === 0) return null;
+  if (!data || !Array.isArray(data) || data.length === 0) return null;
 
   return {
     updatedCount: Number(data[0].updated_count),
