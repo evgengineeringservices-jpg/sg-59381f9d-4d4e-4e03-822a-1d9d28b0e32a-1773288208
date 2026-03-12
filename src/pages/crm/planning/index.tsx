@@ -31,7 +31,7 @@ import {
   deletePlanningPhase,
   getBOQItems
 } from "@/services/crmService";
-import { Plus, Edit2, Trash2, Calendar, TrendingUp, GanttChart, Sparkles, Loader2, RefreshCw, Download, FileText, FileSpreadsheet } from "lucide-react";
+import { Plus, Edit2, Trash2, Calendar, TrendingUp, GanttChart as GanttIcon, Sparkles, Loader2, RefreshCw, Download, FileText, FileSpreadsheet } from "lucide-react";
 import { GanttChart } from "@/components/planning/GanttChart";
 import type { Project, PlanningPhase, Role } from "@/types";
 
@@ -517,7 +517,7 @@ export default function PlanningPage() {
               onClick={() => setViewMode(viewMode === "list" ? "gantt" : "list")}
               disabled={!selectedProject}
             >
-              {viewMode === "list" ? <GanttChart className="h-4 w-4 mr-2" /> : <Calendar className="h-4 w-4 mr-2" />}
+              {viewMode === "list" ? <GanttIcon className="h-4 w-4 mr-2" /> : <Calendar className="h-4 w-4 mr-2" />}
               {viewMode === "list" ? "Gantt View" : "List View"}
             </Button>
           </div>
