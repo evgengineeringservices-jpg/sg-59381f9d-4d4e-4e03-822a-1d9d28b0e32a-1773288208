@@ -1,263 +1,293 @@
 import { useState, useEffect } from "react";
+import { Truck, Calendar, DollarSign, Package, AlertTriangle, CheckCircle } from "lucide-react";
 import { CRMLayout } from "@/components/layout/CRMLayout";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Truck, Calendar, AlertTriangle, CheckCircle2, DollarSign } from "lucide-react";
-import { getProjects, getPlanningPhases, getBOQItems } from "@/services/crmService";
-import { formatPeso } from "@/constants";
-import type { Project, PlanningPhase, BOQItem } from "@/types";
-import { format, addDays, startOfWeek, endOfWeek, isWithinInterval } from "date-fns";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { getProjects } from "@/services/crmService";
+import { generateWeeklyMaterialsForecast } from "@/lib/projectAutomation";
+import type { Project } from "@/types";
+
+interface WeeklyForecast {
+  weekNumber: number;
+  weekStartDate: string;
+  weekEndDate: string;
+  scheduledActivities: string[];
+  materialsNeeded: Record<string, any>;
+  estimatedPettyCash: number;
+  suggestedTasks: string[];
+  procurementRisks: string[];
+  status: string;
+}
 
 export default function LogisticsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [phases, setPhases] = useState<PlanningPhase[]>([]);
-  const [boqItems, setBOQItems] = useState<BOQItem[]>([]);
-  const [selectedProject, setSelectedProject] = useState<string>("all");
-  const [selectedWeek, setSelectedWeek] = useState<Date>(new Date());
-  const [loading, setLoading] = useState(true);
+  const [selectedProject, setSelectedProject] = useState<string>("");
+  const [forecasts, setForecasts] = useState<WeeklyForecast[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [currentWeek, setCurrentWeek] = useState(0);
 
   useEffect(() => {
-    loadData();
+    loadProjects();
+  }, []);
+
+  useEffect(() => {
+    if (selectedProject) {
+      loadWeeklyForecasts();
+    }
   }, [selectedProject]);
 
-  async function loadData() {
-    setLoading(true);
+  const loadProjects = async () => {
     try {
-      const [projectsData, phasesData, boqData] = await Promise.all([
-        getProjects(),
-        getPlanningPhases(selectedProject === "all" ? undefined : selectedProject),
-        getBOQItems(selectedProject === "all" ? undefined : selectedProject),
-      ]);
-      setProjects(projectsData);
-      setPhases(phasesData);
-      setBOQItems(boqData);
+      const data = await getProjects();
+      setProjects(data.filter(p => p.status === "active" || p.status === "planning"));
     } catch (error) {
-      console.error("Error loading logistics data:", error);
+      console.error("Failed to load projects:", error);
+    }
+  };
+
+  const loadWeeklyForecasts = async () => {
+    try {
+      setLoading(true);
+      const result = await generateWeeklyMaterialsForecast(selectedProject);
+      
+      if (result && result.length > 0) {
+        setForecasts(result);
+        // Set current week to the first upcoming week
+        const today = new Date();
+        const upcomingWeek = result.findIndex(f => new Date(f.weekStartDate) >= today);
+        setCurrentWeek(upcomingWeek >= 0 ? upcomingWeek : 0);
+      }
+    } catch (error) {
+      console.error("Failed to load forecasts:", error);
     } finally {
       setLoading(false);
     }
-  }
+  };
 
-  const weekStart = startOfWeek(selectedWeek, { weekStartsOn: 1 });
-  const weekEnd = endOfWeek(selectedWeek, { weekStartsOn: 1 });
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat("en-PH", {
+      style: "currency",
+      currency: "PHP",
+      minimumFractionDigits: 0,
+    }).format(value);
+  };
 
-  const phasesThisWeek = phases.filter((phase) => {
-    const phaseStart = new Date(phase.startDate);
-    const phaseEnd = new Date(phase.endDate);
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("en-PH", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  };
+
+  const getWeekStatus = (forecast: WeeklyForecast) => {
+    const startDate = new Date(forecast.weekStartDate);
+    const today = new Date();
+    
+    if (startDate > today) {
+      return { label: "Upcoming", variant: "secondary" as const };
+    } else if (startDate <= today && new Date(forecast.weekEndDate) >= today) {
+      return { label: "Current Week", variant: "default" as const };
+    } else {
+      return { label: "Past", variant: "outline" as const };
+    }
+  };
+
+  if (loading) {
     return (
-      isWithinInterval(phaseStart, { start: weekStart, end: weekEnd }) ||
-      isWithinInterval(phaseEnd, { start: weekStart, end: weekEnd }) ||
-      (phaseStart <= weekStart && phaseEnd >= weekEnd)
+      <CRMLayout>
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
+            <p className="text-muted-foreground">Generating weekly forecasts...</p>
+          </div>
+        </div>
+      </CRMLayout>
     );
-  });
-
-  const materialsNeeded = phasesThisWeek.flatMap((phase) => {
-    const relatedBOQ = boqItems.filter((item) => item.projectId === phase.projectId);
-    return relatedBOQ.slice(0, 3).map((item) => ({
-      phase: phase.name,
-      projectId: phase.projectId,
-      item: item.description,
-      category: item.category,
-      quantity: item.quantity,
-      unit: item.unit,
-      estimatedCost: (item.unitCost || 0) * (item.quantity || 0),
-    }));
-  });
-
-  const totalMaterialCost = materialsNeeded.reduce((sum, m) => sum + m.estimatedCost, 0);
-  const estimatedPettyCash = totalMaterialCost * 0.15;
+  }
 
   return (
     <CRMLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-display font-bold text-charcoal">Weekly Logistics</h1>
-            <p className="text-muted-foreground mt-1">Automated procurement and petty cash forecasting</p>
+            <h1 className="text-3xl font-bold tracking-tight">Weekly Logistics Planning</h1>
+            <p className="text-muted-foreground">
+              Automated materials forecast and petty cash planning
+            </p>
           </div>
-          <div className="flex items-center gap-4">
-            <Select value={selectedProject} onValueChange={setSelectedProject}>
-              <SelectTrigger className="w-64">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Projects</SelectItem>
-                {projects.map((project) => (
-                  <SelectItem key={project.id} value={project.id}>
-                    {project.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <Select value={selectedProject} onValueChange={setSelectedProject}>
+            <SelectTrigger className="w-[300px]">
+              <SelectValue placeholder="Select project" />
+            </SelectTrigger>
+            <SelectContent>
+              {projects.map((project) => (
+                <SelectItem key={project.id} value={project.id}>
+                  {project.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
-        <div className="flex items-center gap-4">
-          <Button
-            variant="outline"
-            onClick={() => setSelectedWeek(addDays(selectedWeek, -7))}
-          >
-            Previous Week
-          </Button>
-          <div className="flex items-center gap-2 text-lg font-medium">
-            <Calendar className="h-5 w-5" />
-            <span>
-              {format(weekStart, "MMM dd")} - {format(weekEnd, "MMM dd, yyyy")}
-            </span>
-          </div>
-          <Button
-            variant="outline"
-            onClick={() => setSelectedWeek(addDays(selectedWeek, 7))}
-          >
-            Next Week
-          </Button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {!selectedProject ? (
           <Card>
-            <CardHeader className="pb-3">
-              <CardDescription className="flex items-center gap-2">
-                <Truck className="h-4 w-4" />
-                Materials Forecast
-              </CardDescription>
-              <CardTitle className="text-2xl text-gold">{materialsNeeded.length} items</CardTitle>
-            </CardHeader>
+            <CardContent className="flex items-center justify-center h-64">
+              <div className="text-center text-muted-foreground">
+                <Truck className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                <p>Select a project to view weekly logistics forecasts</p>
+              </div>
+            </CardContent>
           </Card>
+        ) : forecasts.length === 0 ? (
           <Card>
-            <CardHeader className="pb-3">
-              <CardDescription className="flex items-center gap-2">
-                <DollarSign className="h-4 w-4" />
-                Estimated Material Cost
-              </CardDescription>
-              <CardTitle className="text-2xl">{formatPeso(totalMaterialCost)}</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader className="pb-3">
-              <CardDescription className="flex items-center gap-2">
-                <DollarSign className="h-4 w-4" />
-                Estimated Petty Cash
-              </CardDescription>
-              <CardTitle className="text-2xl text-green-600">{formatPeso(estimatedPettyCash)}</CardTitle>
-            </CardHeader>
-          </Card>
-        </div>
-
-        {loading ? (
-          <div className="text-center py-12 text-muted-foreground">Loading logistics data...</div>
-        ) : phasesThisWeek.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <CheckCircle2 className="h-12 w-12 text-green-600 mb-4" />
-              <p className="text-muted-foreground">No scheduled activities for this week</p>
+            <CardContent className="flex items-center justify-center h-64">
+              <div className="text-center text-muted-foreground">
+                <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                <p>No forecast data available</p>
+                <p className="text-sm mt-2">Make sure the project has BOQ items and timeline phases</p>
+              </div>
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Scheduled Activities</CardTitle>
-                <CardDescription>Project phases happening this week</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {phasesThisWeek.map((phase) => {
-                    const project = projects.find((p) => p.id === phase.projectId);
-                    return (
-                      <div
-                        key={phase.id}
-                        className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors"
-                      >
-                        <div className="space-y-1">
-                          <div className="font-medium">{phase.name}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {project?.name} • {format(new Date(phase.startDate), "MMM dd")} - {format(new Date(phase.endDate), "MMM dd")}
-                          </div>
-                        </div>
-                        <Badge
-                          className={
-                            phase.status === "completed"
-                              ? "bg-green-500"
-                              : phase.status === "in_progress"
-                              ? "bg-blue-500"
-                              : phase.status === "delayed"
-                              ? "bg-red-500"
-                              : "bg-gray-500"
-                          }
-                        >
-                          {phase.status}
-                        </Badge>
+          <>
+            <div className="flex items-center gap-2 overflow-x-auto pb-2">
+              {forecasts.map((forecast, index) => {
+                const status = getWeekStatus(forecast);
+                return (
+                  <Button
+                    key={index}
+                    variant={currentWeek === index ? "default" : "outline"}
+                    onClick={() => setCurrentWeek(index)}
+                    className="shrink-0"
+                  >
+                    <Calendar className="w-4 h-4 mr-2" />
+                    Week {forecast.weekNumber}
+                    <Badge variant={status.variant} className="ml-2">
+                      {status.label}
+                    </Badge>
+                  </Button>
+                );
+              })}
+            </div>
+
+            {forecasts[currentWeek] && (
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle>Week {forecasts[currentWeek].weekNumber}</CardTitle>
+                        <CardDescription>
+                          {formatDate(forecasts[currentWeek].weekStartDate)} - {formatDate(forecasts[currentWeek].weekEndDate)}
+                        </CardDescription>
                       </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
+                      <Badge variant={getWeekStatus(forecasts[currentWeek]).variant} className="text-lg px-4 py-2">
+                        {getWeekStatus(forecasts[currentWeek]).label}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* Estimated Petty Cash */}
+                    <div className="flex items-center gap-4 p-4 bg-accent/50 rounded-lg">
+                      <div className="p-3 bg-background rounded-lg">
+                        <DollarSign className="w-6 h-6 text-primary" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Estimated Petty Cash Needed</p>
+                        <p className="text-2xl font-bold">{formatCurrency(forecasts[currentWeek].estimatedPettyCash)}</p>
+                      </div>
+                    </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Truck className="h-5 w-5" />
-                  Materials & Procurement Forecast
-                </CardTitle>
-                <CardDescription>AI-suggested materials needed based on scheduled phases</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {materialsNeeded.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No materials forecast for this week</p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Phase</TableHead>
-                          <TableHead>Item</TableHead>
-                          <TableHead>Category</TableHead>
-                          <TableHead className="text-right">Qty</TableHead>
-                          <TableHead>Unit</TableHead>
-                          <TableHead className="text-right">Est. Cost</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {materialsNeeded.map((material, idx) => (
-                          <TableRow key={idx}>
-                            <TableCell className="font-medium">{material.phase}</TableCell>
-                            <TableCell className="max-w-xs truncate">{material.item}</TableCell>
-                            <TableCell>
-                              <Badge variant="outline">{material.category}</Badge>
-                            </TableCell>
-                            <TableCell className="text-right">{material.quantity?.toFixed(2) || 0}</TableCell>
-                            <TableCell>{material.unit}</TableCell>
-                            <TableCell className="text-right font-medium">{formatPeso(material.estimatedCost)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                    {/* Procurement Risks */}
+                    {forecasts[currentWeek].procurementRisks && forecasts[currentWeek].procurementRisks.length > 0 && (
+                      <Alert variant="destructive">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertDescription>
+                          <p className="font-semibold mb-2">Procurement Risks:</p>
+                          <ul className="list-disc list-inside space-y-1">
+                            {forecasts[currentWeek].procurementRisks.map((risk, idx) => (
+                              <li key={idx}>{risk}</li>
+                            ))}
+                          </ul>
+                        </AlertDescription>
+                      </Alert>
+                    )}
 
-            <Card className="border-amber-500 bg-amber-50 dark:bg-amber-950/20">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-amber-900 dark:text-amber-200">
-                  <AlertTriangle className="h-5 w-5" />
-                  Procurement Alerts
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm text-amber-800 dark:text-amber-300">
-                <ul className="space-y-2">
-                  <li>• Ensure materials are ordered 3-5 days in advance for timely delivery</li>
-                  <li>• Verify current market prices before large procurements</li>
-                  <li>• Coordinate with Office Admin for petty cash preparation</li>
-                  <li>• Check supplier lead times for specialized materials</li>
-                </ul>
-              </CardContent>
-            </Card>
-          </div>
+                    <Tabs defaultValue="activities" className="space-y-4">
+                      <TabsList>
+                        <TabsTrigger value="activities">Scheduled Activities</TabsTrigger>
+                        <TabsTrigger value="materials">Materials Needed</TabsTrigger>
+                        <TabsTrigger value="tasks">Suggested Tasks</TabsTrigger>
+                      </TabsList>
+
+                      <TabsContent value="activities" className="space-y-2">
+                        {forecasts[currentWeek].scheduledActivities && forecasts[currentWeek].scheduledActivities.length > 0 ? (
+                          forecasts[currentWeek].scheduledActivities.map((activity, idx) => (
+                            <div key={idx} className="flex items-start gap-3 p-3 border rounded-lg">
+                              <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
+                              <div>
+                                <p className="font-medium">{activity}</p>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-muted-foreground text-center py-8">No scheduled activities</p>
+                        )}
+                      </TabsContent>
+
+                      <TabsContent value="materials" className="space-y-2">
+                        {forecasts[currentWeek].materialsNeeded && Object.keys(forecasts[currentWeek].materialsNeeded).length > 0 ? (
+                          Object.entries(forecasts[currentWeek].materialsNeeded).map(([material, details]: [string, any], idx) => (
+                            <div key={idx} className="flex items-center justify-between p-3 border rounded-lg">
+                              <div className="flex items-center gap-3">
+                                <Package className="w-5 h-5 text-primary" />
+                                <div>
+                                  <p className="font-medium">{material}</p>
+                                  {details.category && (
+                                    <p className="text-sm text-muted-foreground">{details.category}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="font-semibold">
+                                  {details.quantity} {details.unit}
+                                </p>
+                                {details.estimatedCost && (
+                                  <p className="text-sm text-muted-foreground">
+                                    {formatCurrency(details.estimatedCost)}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-muted-foreground text-center py-8">No materials forecast</p>
+                        )}
+                      </TabsContent>
+
+                      <TabsContent value="tasks" className="space-y-2">
+                        {forecasts[currentWeek].suggestedTasks && forecasts[currentWeek].suggestedTasks.length > 0 ? (
+                          forecasts[currentWeek].suggestedTasks.map((task, idx) => (
+                            <div key={idx} className="flex items-start gap-3 p-3 border rounded-lg">
+                              <CheckCircle className="w-5 h-5 text-blue-500 mt-0.5" />
+                              <p>{task}</p>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-muted-foreground text-center py-8">No suggested tasks</p>
+                        )}
+                      </TabsContent>
+                    </Tabs>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </>
         )}
       </div>
     </CRMLayout>
