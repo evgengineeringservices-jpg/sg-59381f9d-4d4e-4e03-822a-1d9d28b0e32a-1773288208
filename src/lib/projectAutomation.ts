@@ -15,7 +15,7 @@ export async function generateWeeklyMaterialsForecast(
   endDate: Date
 ): Promise<any[]> {
   try {
-    const { data, error } = await supabase.rpc("generate_weekly_materials_forecast", {
+    const { data, error } = await supabase.rpc("generate_weekly_materials_forecast" as any, {
       p_project_id: projectId,
       p_start_date: startDate.toISOString().split("T")[0],
       p_end_date: endDate.toISOString().split("T")[0],
@@ -36,12 +36,12 @@ export async function generateProjectTasks(
   projectId: string
 ): Promise<{ created: number; tasks: any[] }> {
   try {
-    const { data, error } = await supabase.rpc("generate_project_tasks", {
+    const { data, error } = await supabase.rpc("generate_project_tasks" as any, {
       p_project_id: projectId,
     });
 
     if (error) throw error;
-    return data || { created: 0, tasks: [] };
+    return (data as any) || { created: 0, tasks: [] };
   } catch (error) {
     console.error("Failed to generate tasks:", error);
     throw error;
@@ -55,7 +55,7 @@ export async function analyzeTaskProfitability(
   projectId: string
 ): Promise<any[]> {
   try {
-    const { data, error } = await supabase.rpc("analyze_task_profitability", {
+    const { data, error } = await supabase.rpc("analyze_task_profitability" as any, {
       p_project_id: projectId,
     });
 

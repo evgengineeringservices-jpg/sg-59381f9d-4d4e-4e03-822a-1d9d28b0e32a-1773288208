@@ -19,11 +19,12 @@ import {
   generateProjectTasks,
   analyzeTaskProfitability,
   computeProgressBilling,
-  getWeeklyLogistics,
+  getWeeklyLogistics as getWeeklyLogisticsAuto,
   createBillingMilestone as createMilestone,
   getProjectCostSummary,
   suggestTaskPrioritization,
 } from "@/lib/projectAutomation";
+import type { BillingMilestone } from "@/types";
 
 // ===== MAPPERS =====
 
@@ -879,9 +880,25 @@ export async function updateBillingMilestone(
   id: string,
   updates: Partial<BillingMilestone>
 ): Promise<void> {
+  const payload = {
+    name: updates.name,
+    description: updates.description,
+    contract_amount: updates.contractAmount,
+    trigger_condition: updates.triggerCondition,
+    percentage_of_contract: updates.percentageOfContract,
+    status: updates.status,
+    triggered_at: updates.triggeredAt,
+    billed_at: updates.billedAt,
+  };
+  
+  // Remove undefined values
+  Object.keys(payload).forEach(
+    (key) => payload[key as keyof typeof payload] === undefined && delete payload[key as keyof typeof payload]
+  );
+
   const { error } = await supabase
     .from("billing_milestones")
-    .update(mapToSnakeCase(updates))
+    .update(payload)
     .eq("id", id);
 
   if (error) throw error;
@@ -898,7 +915,6 @@ export {
   generateProjectTasks,
   analyzeTaskProfitability,
   computeProgressBilling,
-  getWeeklyLogistics,
   getProjectCostSummary,
   suggestTaskPrioritization,
 };

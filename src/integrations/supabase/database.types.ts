@@ -110,6 +110,59 @@ export type Database = {
           },
         ]
       }
+      billing_milestones: {
+        Row: {
+          billed_at: string | null
+          contract_amount: number
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+          percentage_of_contract: number
+          project_id: string
+          status: string
+          trigger_condition: string
+          triggered_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          billed_at?: string | null
+          contract_amount?: number
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          percentage_of_contract?: number
+          project_id: string
+          status?: string
+          trigger_condition: string
+          triggered_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          billed_at?: string | null
+          contract_amount?: number
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          percentage_of_contract?: number
+          project_id?: string
+          status?: string
+          trigger_condition?: string
+          triggered_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_milestones_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       boq_items: {
         Row: {
           category: string
@@ -691,6 +744,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      analyze_task_profitability: {
+        Args: { p_project_id: string }
+        Returns: {
+          cost_effectiveness_score: number
+          profit_impact_score: number
+          task_id: string
+          title: string
+          urgency_score: number
+        }[]
+      }
       calculate_labor_cost:
         | {
             Args: {
@@ -756,6 +819,17 @@ export type Database = {
           estimated_total: number
           quantity: number
           suggested_item_no: string
+          unit: string
+        }[]
+      }
+      generate_project_tasks: { Args: { p_project_id: string }; Returns: Json }
+      generate_weekly_materials_forecast: {
+        Args: { p_end_date: string; p_project_id: string; p_start_date: string }
+        Returns: {
+          category: string
+          estimated_cost: number
+          estimated_qty: number
+          material_name: string
           unit: string
         }[]
       }
