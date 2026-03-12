@@ -691,7 +691,103 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      calculate_labor_cost: {
+        Args: {
+          p_category: string
+          p_labor_mode?: string
+          p_material_cost: number
+          p_quantity: number
+          p_unit: string
+        }
+        Returns: number
+      }
+      calculate_material_cost: {
+        Args: {
+          p_category: string
+          p_description: string
+          p_quantity: number
+          p_unit: string
+        }
+        Returns: number
+      }
+      check_market_price_changes: {
+        Args: { p_days_ago?: number }
+        Returns: {
+          affected_projects: number
+          category: string
+          item_name: string
+          new_price: number
+          old_price: number
+          price_change_percent: number
+        }[]
+      }
+      create_boq_item_with_auto_cost: {
+        Args: {
+          p_category: string
+          p_description: string
+          p_dpwh_item_code: string
+          p_item_no: string
+          p_manual_labor_cost?: number
+          p_manual_material_cost?: number
+          p_project_id: string
+          p_quantity: number
+          p_unit: string
+        }
+        Returns: string
+      }
+      generate_boq_from_drawing_analysis: {
+        Args: {
+          p_drawing_id: string
+          p_extracted_data: Json
+          p_project_id: string
+        }
+        Returns: {
+          category: string
+          confidence_score: number
+          description: string
+          dpwh_code: string
+          estimated_labor_cost: number
+          estimated_material_cost: number
+          estimated_total: number
+          quantity: number
+          suggested_item_no: string
+          unit: string
+        }[]
+      }
+      get_boq_summary: {
+        Args: { p_project_id: string }
+        Returns: {
+          cost_by_category: Json
+          total_cost: number
+          total_items: number
+          total_labor_cost: number
+          total_material_cost: number
+        }[]
+      }
+      get_current_market_price: {
+        Args: { p_category?: string; p_item_name: string }
+        Returns: number
+      }
+      recalculate_project_boq_costs: {
+        Args: { p_project_id: string }
+        Returns: {
+          cost_increase: number
+          items_updated: number
+          new_total: number
+          old_total: number
+        }[]
+      }
+      suggest_market_prices_for_boq: {
+        Args: { p_category: string; p_description: string; p_unit: string }
+        Returns: {
+          date: string
+          item_name: string
+          location: string
+          notes: string
+          price: number
+          supplier: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
