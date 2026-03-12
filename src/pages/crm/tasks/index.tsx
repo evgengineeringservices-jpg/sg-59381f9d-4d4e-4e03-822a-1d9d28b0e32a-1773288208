@@ -27,6 +27,8 @@ import { Plus, Search, Trash2, AlertCircle, CheckCircle2, Clock, Edit, Sparkles,
 import { cn } from "@/lib/utils";
 import type { Project, Task, TaskStatus, TaskPriority } from "@/types";
 import { exportTasksToExcel, printElement } from "@/lib/exportUtils";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { useToast } from "@/hooks/use-toast";
 
 export default function TasksPage() {
@@ -54,6 +56,16 @@ export default function TasksPage() {
     status: "todo" as TaskStatus,
     source: "manual" as "manual" | "auto_generated",
   });
+
+  const {
+    currentPage,
+    pageSize,
+    totalPages,
+    totalItems,
+    paginatedData,
+    handlePageChange,
+    handlePageSizeChange,
+  } = usePagination({ data: filteredTasks, initialPageSize: 12 });
 
   useEffect(() => {
     loadData();
@@ -277,157 +289,167 @@ export default function TasksPage() {
           </div>
         </div>
 
-        {/* Tasks List - Mobile Optimized Card View */}
-        <div id="tasks-list">
-          {filteredTasks.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <CheckSquare className="w-12 h-12 text-muted-foreground mb-4" />
-                <p className="text-center text-muted-foreground">
-                  {searchQuery || filterProject !== "all" || filterStatus !== "all"
-                    ? "No tasks match your filters"
-                    : "No tasks yet. Create your first task to get started."}
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-3">
-              {filteredTasks.map((task) => {
-                const StatusIcon = getStatusIcon(task.status);
-                const PriorityIcon = task.priority === "critical" ? AlertCircle : Clock;
-                
-                return (
-                  <Card key={task.id} className="hover:shadow-md transition-shadow">
-                    <CardContent className="p-4 sm:p-6">
-                      <div className="space-y-3">
-                        {/* Header */}
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex-1 min-w-0">
-                            <h3 className="font-semibold text-base sm:text-lg truncate">{task.title}</h3>
-                            {task.description && (
-                              <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{task.description}</p>
-                            )}
-                          </div>
-                          <div className="flex gap-1 shrink-0">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleEdit(task)}
-                              className="touch-manipulation h-9 w-9"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDelete(task.id)}
-                              className="touch-manipulation h-9 w-9"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </div>
-
-                        {/* Badges - Responsive */}
-                        <div className="flex flex-wrap gap-2">
-                          <Badge
-                            variant={
-                              task.status === "done"
-                                ? "default"
-                                : task.status === "in_progress"
-                                ? "secondary"
-                                : task.status === "blocked"
-                                ? "destructive"
-                                : "outline"
-                            }
-                          >
-                            <StatusIcon className="w-3 h-3 mr-1" />
-                            {TASK_STATUS[task.status as keyof typeof TASK_STATUS]}
-                          </Badge>
-                          <Badge
-                            variant={
-                              task.priority === "critical"
-                                ? "destructive"
-                                : task.priority === "high"
-                                ? "default"
-                                : "outline"
-                            }
-                          >
-                            <PriorityIcon className="w-3 h-3 mr-1" />
-                            {TASK_PRIORITY[task.priority as keyof typeof TASK_PRIORITY]}
-                          </Badge>
-                          {task.source === "auto_generated" && (
-                            <Badge variant="secondary">
-                              <Sparkles className="w-3 h-3 mr-1" />
-                              Auto
-                            </Badge>
-                          )}
-                        </div>
-
-                        {/* Details Grid - Mobile Optimized */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-                          {task.projectId && (
-                            <div className="flex items-center gap-2">
-                              <FolderKanban className="w-4 h-4 text-muted-foreground shrink-0" />
-                              <span className="truncate">
-                                {projects.find((p) => p.id === task.projectId)?.name || "Unknown Project"}
-                              </span>
-                            </div>
-                          )}
-                          {task.dueDate && (
-                            <div className="flex items-center gap-2">
-                              <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
-                              <span className={cn(
-                                "truncate",
-                                new Date(task.dueDate) < new Date() && task.status !== "done" && "text-destructive font-medium"
-                              )}>
-                                {new Date(task.dueDate).toLocaleDateString("en-PH", {
-                                  month: "short",
-                                  day: "numeric",
-                                  year: "numeric",
-                                })}
-                              </span>
-                            </div>
-                          )}
-                          {task.assignedTo && (
-                            <div className="flex items-center gap-2">
-                              <User className="w-4 h-4 text-muted-foreground shrink-0" />
-                              <span className="truncate">Assigned</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Quick Status Update - Mobile Only */}
-                        <div className="sm:hidden flex gap-2 pt-2 border-t">
-                          {task.status !== "done" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="flex-1 touch-manipulation"
-                              onClick={() => handleQuickStatusUpdate(task.id, "in_progress")}
-                            >
-                              Start
-                            </Button>
-                          )}
-                          {task.status === "in_progress" && (
-                            <Button
-                              size="sm"
-                              variant="default"
-                              className="flex-1 touch-manipulation"
-                              onClick={() => handleQuickStatusUpdate(task.id, "done")}
-                            >
-                              Complete
-                            </Button>
-                          )}
-                        </div>
+        {/* Tasks Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+          {paginatedData.map((task) => {
+            const StatusIcon = getStatusIcon(task.status);
+            const PriorityIcon = task.priority === "critical" ? AlertCircle : Clock;
+            
+            return (
+              <Card key={task.id} className="hover:shadow-lg transition-shadow">
+                <CardContent className="p-4 sm:p-6">
+                  <div className="space-y-3">
+                    {/* Header */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-base sm:text-lg truncate">{task.title}</h3>
+                        {task.description && (
+                          <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{task.description}</p>
+                        )}
                       </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
+                      <div className="flex gap-1 shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEdit(task)}
+                          className="touch-manipulation h-9 w-9"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDelete(task.id)}
+                          className="touch-manipulation h-9 w-9"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Badges - Responsive */}
+                    <div className="flex flex-wrap gap-2">
+                      <Badge
+                        variant={
+                          task.status === "done"
+                            ? "default"
+                            : task.status === "in_progress"
+                            ? "secondary"
+                            : task.status === "blocked"
+                            ? "destructive"
+                            : "outline"
+                        }
+                      >
+                        <StatusIcon className="w-3 h-3 mr-1" />
+                        {TASK_STATUS[task.status as keyof typeof TASK_STATUS]}
+                      </Badge>
+                      <Badge
+                        variant={
+                          task.priority === "critical"
+                            ? "destructive"
+                            : task.priority === "high"
+                            ? "default"
+                            : "outline"
+                        }
+                      >
+                        <PriorityIcon className="w-3 h-3 mr-1" />
+                        {TASK_PRIORITY[task.priority as keyof typeof TASK_PRIORITY]}
+                      </Badge>
+                      {task.source === "auto_generated" && (
+                        <Badge variant="secondary">
+                          <Sparkles className="w-3 h-3 mr-1" />
+                          Auto
+                        </Badge>
+                      )}
+                    </div>
+
+                    {/* Details Grid - Mobile Optimized */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                      {task.projectId && (
+                        <div className="flex items-center gap-2">
+                          <FolderKanban className="w-4 h-4 text-muted-foreground shrink-0" />
+                          <span className="truncate">
+                            {projects.find((p) => p.id === task.projectId)?.name || "Unknown Project"}
+                          </span>
+                        </div>
+                      )}
+                      {task.dueDate && (
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
+                          <span className={cn(
+                            "truncate",
+                            new Date(task.dueDate) < new Date() && task.status !== "done" && "text-destructive font-medium"
+                          )}>
+                            {new Date(task.dueDate).toLocaleDateString("en-PH", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })}
+                          </span>
+                        </div>
+                      )}
+                      {task.assignedTo && (
+                        <div className="flex items-center gap-2">
+                          <User className="w-4 h-4 text-muted-foreground shrink-0" />
+                          <span className="truncate">Assigned</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Quick Status Update - Mobile Only */}
+                    <div className="sm:hidden flex gap-2 pt-2 border-t">
+                      {task.status !== "done" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 touch-manipulation"
+                          onClick={() => handleQuickStatusUpdate(task.id, "in_progress")}
+                        >
+                          Start
+                        </Button>
+                      )}
+                      {task.status === "in_progress" && (
+                        <Button
+                          size="sm"
+                          variant="default"
+                          className="flex-1 touch-manipulation"
+                          onClick={() => handleQuickStatusUpdate(task.id, "done")}
+                        >
+                          Complete
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
+
+        {filteredTasks.length === 0 && (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <CheckSquare className="w-12 h-12 text-muted-foreground mb-4" />
+              <p className="text-center text-muted-foreground">
+                {searchQuery || filterProject !== "all" || filterStatus !== "all"
+                  ? "No tasks match your filters"
+                  : "No tasks yet. Create your first task to get started."}
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Pagination */}
+        {filteredTasks.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            pageSize={pageSize}
+            totalItems={totalItems}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+          />
+        )}
 
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">

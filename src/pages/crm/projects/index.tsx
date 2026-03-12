@@ -28,6 +28,8 @@ import { Plus, Search, Edit2, Trash2, MapPin, Calendar, DollarSign, Edit, Folder
 import type { Project, ProjectStatus, ProjectType, PCabCategory, PermitStatus } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { exportProjectsToExcel, printElement } from "@/lib/exportUtils";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 
 export default function ProjectsPage() {
   const { toast } = useToast();
@@ -75,6 +77,16 @@ export default function ProjectsPage() {
     });
     setFilteredProjects(filtered);
   }, [searchQuery, filterType, filterStatus, filterPermit, projects]);
+
+  const {
+    currentPage,
+    pageSize,
+    totalPages,
+    totalItems,
+    paginatedData,
+    handlePageChange,
+    handlePageSizeChange,
+  } = usePagination({ data: filteredProjects, initialPageSize: 10 });
 
   async function loadProjects() {
     try {
@@ -265,7 +277,7 @@ export default function ProjectsPage() {
         <div id="projects-list">
           {/* Projects Grid - Mobile Optimized */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-            {filteredProjects.map((project) => (
+            {paginatedData.map((project) => (
               <Card key={project.id} className="hover:shadow-lg transition-shadow">
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-3">
@@ -383,7 +395,7 @@ export default function ProjectsPage() {
             ))}
           </div>
 
-          {filteredProjects.length === 0 && (
+          {paginatedData.length === 0 && (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <FolderKanban className="w-12 h-12 text-muted-foreground mb-4" />
@@ -394,6 +406,18 @@ export default function ProjectsPage() {
                 </p>
               </CardContent>
             </Card>
+          )}
+
+          {/* Pagination */}
+          {paginatedData.length > 0 && (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              pageSize={pageSize}
+              totalItems={totalItems}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
+            />
           )}
         </div>
 

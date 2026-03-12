@@ -35,6 +35,8 @@ import type { Project, BOQItem } from "@/types";
 import { BOQ_CATEGORIES } from "@/constants";
 import { exportBOQToExcel, printBOQ } from "@/lib/exportUtils";
 import { GenerateBOQDialog } from "@/components/boq/GenerateBOQDialog";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 
 type SortField = "itemNo" | "description" | "category" | "quantity" | "materialCost" | "laborCost" | "total";
 type SortDirection = "asc" | "desc";
@@ -65,6 +67,16 @@ export default function BOQPage() {
   const [priceChanges, setPriceChanges] = useState<any[]>([]);
   const [showGenerateBOQ, setShowGenerateBOQ] = useState(false);
   const { toast } = useToast();
+
+  const {
+    currentPage,
+    pageSize,
+    totalPages,
+    totalItems,
+    paginatedData,
+    handlePageChange,
+    handlePageSizeChange,
+  } = usePagination({ data: filteredItems, initialPageSize: 25 });
 
   useEffect(() => {
     loadProjects();
@@ -634,7 +646,7 @@ export default function BOQPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredItems.map((item) => (
+                      {paginatedData.map((item) => (
                         <tr key={item.id} className="border-b hover:bg-accent/50">
                           <td className="py-3 font-medium">{item.itemNo}</td>
                           <td className="py-3 text-sm text-muted-foreground">

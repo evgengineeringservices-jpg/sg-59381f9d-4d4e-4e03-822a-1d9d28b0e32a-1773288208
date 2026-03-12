@@ -26,6 +26,9 @@ import { getLeads, createLead, updateLead, deleteLead } from "@/services/crmServ
 import { Plus, Search, Edit2, Trash2, Mail, Phone, Building2, MapPin } from "lucide-react";
 import type { Lead, LeadStatus, ProjectType } from "@/types";
 import { PROJECT_TYPES } from "@/constants";
+import { exportLeadsToExcel, printElement } from "@/lib/exportUtils";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 
 export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -61,6 +64,16 @@ export default function LeadsPage() {
     );
     setFilteredLeads(filtered);
   }, [searchQuery, leads]);
+
+  const {
+    currentPage,
+    pageSize,
+    totalPages,
+    totalItems,
+    paginatedData,
+    handlePageChange,
+    handlePageSizeChange,
+  } = usePagination({ data: filteredLeads, initialPageSize: 12 });
 
   async function loadLeads() {
     try {
@@ -325,7 +338,87 @@ export default function LeadsPage() {
           </div>
         </div>
 
-        {filteredLeads.length === 0 ? (
+        {/* Leads Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+          {paginatedData.map((lead) => (
+            <Card key={lead.id} className="hover:shadow-lg transition-shadow">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-xl mb-1">{lead.name}</h3>
+                    {lead.company && (
+                      <p className="text-sm text-muted-foreground">{lead.company}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleOpenDialog(lead)}
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDelete(lead.id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <Badge className={getStatusColor(lead.status)}>
+                    {lead.status.replace("_", " ")}
+                  </Badge>
+                  <Badge variant="outline">
+                    {PROJECT_TYPES.find(t => t.value === lead.projectType)?.label}
+                  </Badge>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Mail className="w-4 h-4" />
+                    <span className="truncate">{lead.email}</span>
+                  </div>
+                  {lead.phone && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Phone className="w-4 h-4" />
+                      <span>{lead.phone}</span>
+                    </div>
+                  )}
+                  {lead.location && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <MapPin className="w-4 h-4" />
+                      <span>{lead.location}</span>
+                    </div>
+                  )}
+                  {lead.budgetRange && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Building2 className="w-4 h-4" />
+                      <span>{lead.budgetRange}</span>
+                    </div>
+                  )}
+                </div>
+
+                {lead.notes && (
+                  <div className="mt-4 pt-4 border-t">
+                    <p className="text-sm text-muted-foreground line-clamp-2">{lead.notes}</p>
+                  </div>
+                )}
+
+                {lead.source && (
+                  <div className="mt-4 pt-4 border-t">
+                    <p className="text-xs text-muted-foreground">Source: {lead.source}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {filteredLeads.length === 0 && (
           <Card className="shadow-card">
             <CardContent className="flex flex-col items-center justify-center py-16">
               <div className="text-muted-foreground mb-4">No leads found</div>
@@ -335,85 +428,18 @@ export default function LeadsPage() {
               </Button>
             </CardContent>
           </Card>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-            {filteredLeads.map((lead) => (
-              <Card key={lead.id} className="shadow-card hover:shadow-premium transition-shadow">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-xl mb-1">{lead.name}</h3>
-                      {lead.company && (
-                        <p className="text-sm text-muted-foreground">{lead.company}</p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleOpenDialog(lead)}
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(lead.id)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
+        )}
 
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    <Badge className={getStatusColor(lead.status)}>
-                      {lead.status.replace("_", " ")}
-                    </Badge>
-                    <Badge variant="outline">
-                      {PROJECT_TYPES.find(t => t.value === lead.projectType)?.label}
-                    </Badge>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Mail className="w-4 h-4" />
-                      <span className="truncate">{lead.email}</span>
-                    </div>
-                    {lead.phone && (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Phone className="w-4 h-4" />
-                        <span>{lead.phone}</span>
-                      </div>
-                    )}
-                    {lead.location && (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <MapPin className="w-4 h-4" />
-                        <span>{lead.location}</span>
-                      </div>
-                    )}
-                    {lead.budgetRange && (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Building2 className="w-4 h-4" />
-                        <span>{lead.budgetRange}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {lead.notes && (
-                    <div className="mt-4 pt-4 border-t">
-                      <p className="text-sm text-muted-foreground line-clamp-2">{lead.notes}</p>
-                    </div>
-                  )}
-
-                  {lead.source && (
-                    <div className="mt-4 pt-4 border-t">
-                      <p className="text-xs text-muted-foreground">Source: {lead.source}</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+        {/* Pagination */}
+        {filteredLeads.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            pageSize={pageSize}
+            totalItems={totalItems}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+          />
         )}
       </div>
     </CRMLayout>
