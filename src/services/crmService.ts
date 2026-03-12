@@ -759,38 +759,52 @@ export async function deleteWeeklyLogistics(id: string): Promise<void> {
 // ===== MARKET PRICES =====
 
 export async function getMarketPrices(): Promise<MarketPrice[]> {
-  const { data, error } = await supabase.from("market_prices").select("*").order("date_recorded", { ascending: false });
+  const { data, error } = await supabase
+    .from("market_prices")
+    .select("*")
+    .order("date_recorded", { ascending: false });
   if (error) throw error;
   return (data || []).map(mapMarketPrice);
 }
 
-export async function createMarketPrice(price: Partial<MarketPrice>): Promise<void> {
-  const { error } = await supabase.from("market_prices").insert({
-    item_name: price.itemName!,
-    category: price.category!,
-    unit: price.unit!,
-    price: price.pricePerUnit || 0,
-    supplier: price.supplier,
-    location: price.location,
-    date_recorded: price.effectiveDate!,
-    source: price.source,
-    notes: price.notes,
-  });
+export async function createMarketPrice(
+  price: Partial<MarketPrice>
+): Promise<MarketPrice> {
+  const { data, error } = await supabase
+    .from("market_prices")
+    .insert({
+      item_name: price.itemName,
+      category: price.category,
+      unit: price.unit,
+      price: price.price,
+      supplier: price.supplier,
+      location: price.location,
+      source: price.source,
+      notes: price.notes,
+    } as any)
+    .select()
+    .single();
   if (error) throw error;
+  return mapMarketPrice(data);
 }
 
-export async function updateMarketPrice(id: string, updates: Partial<MarketPrice>): Promise<void> {
-  const { error } = await supabase.from("market_prices").update({
-    item_name: updates.itemName,
-    category: updates.category,
-    unit: updates.unit,
-    price: updates.pricePerUnit,
-    supplier: updates.supplier,
-    location: updates.location,
-    date_recorded: updates.effectiveDate,
-    source: updates.source,
-    notes: updates.notes,
-  }).eq("id", id);
+export async function updateMarketPrice(
+  id: string,
+  price: Partial<MarketPrice>
+): Promise<void> {
+  const { error } = await supabase
+    .from("market_prices")
+    .update({
+      item_name: price.itemName,
+      category: price.category,
+      unit: price.unit,
+      price: price.price,
+      supplier: price.supplier,
+      location: price.location,
+      source: price.source,
+      notes: price.notes,
+    } as any)
+    .eq("id", id);
   if (error) throw error;
 }
 

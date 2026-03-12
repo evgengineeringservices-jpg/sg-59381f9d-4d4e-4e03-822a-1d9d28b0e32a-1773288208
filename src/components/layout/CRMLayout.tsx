@@ -32,6 +32,7 @@ import {
   LogOut,
   Menu,
   X,
+  TrendingUp,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -73,6 +74,12 @@ const navigationGroups = [
       { label: "Settings", href: "/crm/admin/settings", icon: Settings, roles: ["super_admin", "owner", "contractor_admin"] },
     ],
   },
+];
+
+const adminNavItems = [
+  { icon: Users, label: "Users", href: "/crm/admin/users" },
+  { icon: Settings, label: "Settings", href: "/crm/admin/settings" },
+  { icon: TrendingUp, label: "Market Prices", href: "/crm/admin/market-prices" },
 ];
 
 export function CRMLayout({ children }: { children: React.ReactNode }) {
