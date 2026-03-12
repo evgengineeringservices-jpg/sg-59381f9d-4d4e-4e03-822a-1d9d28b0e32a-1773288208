@@ -37,7 +37,7 @@ import {
   deleteMarketPrice,
 } from "@/services/crmService";
 import type { MarketPrice } from "@/types";
-import { DPWH_CATEGORIES, DPWH_UNITS } from "@/constants";
+import { BOQ_CATEGORIES, DPWH_UNITS } from "@/constants";
 import { format } from "date-fns";
 
 export default function MarketPricesPage() {
@@ -122,7 +122,7 @@ export default function MarketPricesPage() {
         itemName: price.itemName,
         category: price.category,
         unit: price.unit,
-        price: price.price.toString(),
+        price: price.pricePerUnit.toString(),
         supplier: price.supplier || "",
         location: price.location || "",
         source: price.source || "",
@@ -146,11 +146,11 @@ export default function MarketPricesPage() {
 
   async function handleSubmit() {
     try {
-      const priceData = {
+      const priceData: Partial<MarketPrice> = {
         itemName: formData.itemName,
         category: formData.category,
-        unit: formData.unit,
-        price: parseFloat(formData.price),
+        unit: formData.unit as any,
+        pricePerUnit: parseFloat(formData.price),
         supplier: formData.supplier || null,
         location: formData.location || null,
         source: formData.source || null,
@@ -300,9 +300,9 @@ export default function MarketPricesPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Categories</SelectItem>
-                {DPWH_CATEGORIES.map((cat) => (
-                  <SelectItem key={cat} value={cat}>
-                    {cat}
+                {BOQ_CATEGORIES.map((cat) => (
+                  <SelectItem key={cat.value} value={cat.value}>
+                    {cat.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -355,14 +355,14 @@ export default function MarketPricesPage() {
                     </TableCell>
                     <TableCell>{price.unit}</TableCell>
                     <TableCell className="text-right font-semibold">
-                      {formatPeso(price.price)}
+                      {formatPeso(price.pricePerUnit)}
                     </TableCell>
                     <TableCell>{price.supplier || "-"}</TableCell>
                     <TableCell>{price.location || "-"}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1 text-sm text-muted-foreground">
                         <Calendar className="h-3 w-3" />
-                        {format(new Date(price.dateRecorded), "MMM d, yyyy")}
+                        {format(new Date(price.effectiveDate), "MMM d, yyyy")}
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
@@ -428,9 +428,9 @@ export default function MarketPricesPage() {
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {DPWH_CATEGORIES.map((cat) => (
-                    <SelectItem key={cat} value={cat}>
-                      {cat}
+                  {BOQ_CATEGORIES.map((cat) => (
+                    <SelectItem key={cat.value} value={cat.value}>
+                      {cat.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -450,8 +450,8 @@ export default function MarketPricesPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {DPWH_UNITS.map((unit) => (
-                    <SelectItem key={unit} value={unit}>
-                      {unit}
+                    <SelectItem key={unit.value} value={unit.value}>
+                      {unit.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
