@@ -260,7 +260,7 @@ export default function DrawingsPage() {
                   <CardHeader>
                     <div className="flex items-start justify-between">
                       <div className="space-y-1">
-                        <CardTitle className="text-xl">{drawing.title}</CardTitle>
+                        <CardTitle className="text-xl">{drawing.fileName}</CardTitle>
                         <CardDescription className="flex items-center gap-2 text-sm">
                           {project && <span>{project.name}</span>}
                           <span>•</span>

@@ -10,8 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Receipt, Calendar, Edit, Trash2 } from "lucide-react";
-import { getBillingItems, createBillingItem, updateBillingItem, deleteBillingItem, getProjects } from "@/services/crmService";
-import { BILLING_TYPES, BILLING_STATUSES, formatPeso, calculateBilling, PH_VAT_RATE, PH_EWT_RATE, PH_RETENTION_RATE } from "@/constants";
+import { getBillingItems, createBillingItem, updateBillingItem, deleteBillingItem, getProjects, calculateBilling } from "@/services/crmService";
+import { BILLING_TYPES, BILLING_STATUSES, formatPeso, PH_VAT_RATE, PH_EWT_RATE, PH_RETENTION_RATE } from "@/constants";
 import type { BillingItem, Project, BillingType, BillingStatus } from "@/types";
 import { format } from "date-fns";
 

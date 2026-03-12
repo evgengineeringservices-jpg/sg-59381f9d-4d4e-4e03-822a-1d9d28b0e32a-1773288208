@@ -40,6 +40,8 @@ export default function ContactPage() {
         message: formData.message,
         source: "website_contact",
         status: "new",
+        notes: null,
+        assignedTo: null,
       });
       setSubmitted(true);
       setFormData({
