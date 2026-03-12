@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Upload, FileText, Trash2, Eye, Sparkles } from "lucide-react";
-import { getDrawingLogs, uploadDrawing, deleteDrawing, getProjects } from "@/services/crmService";
+import { getDrawings, uploadDrawing, deleteDrawing, getProjects } from "@/services/crmService";
 import type { DrawingLog, Project } from "@/types";
 import { format } from "date-fns";
 
@@ -36,7 +36,7 @@ export default function DrawingsPage() {
     setLoading(true);
     try {
       const [drawingsData, projectsData] = await Promise.all([
-        getDrawingLogs(selectedProject === "all" ? undefined : selectedProject),
+        getDrawings(selectedProject === "all" ? undefined : selectedProject),
         getProjects(),
       ]);
       setDrawings(drawingsData);
