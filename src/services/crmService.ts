@@ -429,7 +429,12 @@ export async function deleteProject(id: string): Promise<void> {
 // ===== BOQ ITEMS =====
 
 export async function getBOQItems(projectId: string): Promise<BOQItem[]> {
-  const { data, error } = await supabase.from("boq_items").select("*").eq("project_id", projectId).order("item_no", { ascending: true });
+  const { data, error } = await supabase
+    .from("boq_items")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("item_no", { ascending: true });
+
   if (error) throw error;
   return (data || []).map(mapBOQItem);
 }

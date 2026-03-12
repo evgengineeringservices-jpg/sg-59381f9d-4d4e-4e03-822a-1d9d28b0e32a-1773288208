@@ -86,10 +86,10 @@ export type DocumentCategory =
   | "other";
 
 export type BOQCategory =
-  | "mobilization"
+  | "mobilization_demobilization"
   | "earthworks"
-  | "substructure"
-  | "concrete"
+  | "substructure_foundation"
+  | "concrete_works"
   | "reinforcing_steel"
   | "structural_steel"
   | "masonry"
@@ -108,9 +108,9 @@ export type BOQCategory =
   | "miscellaneous";
 
 export type DPWHUnit =
-  | "cu.m"
-  | "sq.m"
-  | "l.m"
+  | "cu_m"
+  | "sq_m"
+  | "l_m"
   | "kg"
   | "pcs"
   | "lot"
@@ -120,7 +120,7 @@ export type DPWHUnit =
   | "sheets"
   | "lengths"
   | "each"
-  | "man-day"
+  | "man_day"
   | "ls";
 
 // Database entities
