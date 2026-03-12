@@ -14,6 +14,16 @@ import type {
   MarketPrice,
   AuditLog,
 } from "@/types";
+import {
+  generateWeeklyMaterialsForecast,
+  generateProjectTasks,
+  analyzeTaskProfitability,
+  computeProgressBilling,
+  getWeeklyLogistics,
+  createBillingMilestone as createMilestone,
+  getProjectCostSummary,
+  suggestTaskPrioritization,
+} from "@/lib/projectAutomation";
 
 // ===== MAPPERS =====
 
@@ -260,6 +270,23 @@ function mapAuditLog(db: any): AuditLog {
     oldValue: db.old_value as any || null,
     newValue: db.new_value as any || null,
     createdAt: db.created_at || "",
+  };
+}
+
+function mapBillingMilestone(milestone: any): BillingMilestone {
+  return {
+    id: milestone.id,
+    projectId: milestone.project_id,
+    name: milestone.name,
+    description: milestone.description,
+    contractAmount: milestone.contract_amount,
+    triggerCondition: milestone.trigger_condition,
+    percentageOfContract: milestone.percentage_of_contract,
+    status: milestone.status,
+    triggeredAt: milestone.triggered_at,
+    billedAt: milestone.billed_at,
+    createdAt: milestone.created_at,
+    updatedAt: milestone.updated_at,
   };
 }
 
@@ -820,3 +847,58 @@ export async function getAuditLogs(): Promise<AuditLog[]> {
   if (error) throw error;
   return (data || []).map(mapAuditLog);
 }
+
+// Billing Milestones
+export async function getBillingMilestones(
+  projectId: string
+): Promise<BillingMilestone[]> {
+  const { data, error } = await supabase
+    .from("billing_milestones")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("percentage_of_contract", { ascending: true });
+
+  if (error) throw error;
+  return (data || []).map(mapBillingMilestone);
+}
+
+export async function createBillingMilestone(
+  milestone: Partial<BillingMilestone>
+): Promise<void> {
+  await createMilestone({
+    projectId: milestone.projectId!,
+    name: milestone.name!,
+    description: milestone.description || "",
+    contractAmount: milestone.contractAmount!,
+    triggerCondition: milestone.triggerCondition!,
+    percentageOfContract: milestone.percentageOfContract!,
+  });
+}
+
+export async function updateBillingMilestone(
+  id: string,
+  updates: Partial<BillingMilestone>
+): Promise<void> {
+  const { error } = await supabase
+    .from("billing_milestones")
+    .update(mapToSnakeCase(updates))
+    .eq("id", id);
+
+  if (error) throw error;
+}
+
+export async function deleteBillingMilestone(id: string): Promise<void> {
+  const { error } = await supabase.from("billing_milestones").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// Project Automation Functions
+export {
+  generateWeeklyMaterialsForecast,
+  generateProjectTasks,
+  analyzeTaskProfitability,
+  computeProgressBilling,
+  getWeeklyLogistics,
+  getProjectCostSummary,
+  suggestTaskPrioritization,
+};

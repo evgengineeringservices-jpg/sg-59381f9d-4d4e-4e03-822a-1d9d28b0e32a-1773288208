@@ -361,3 +361,28 @@ export interface AuditLog {
   newValue: Record<string, unknown> | null;
   createdAt: string;
 }
+
+export interface BillingMilestone {
+  id: string;
+  projectId: string;
+  name: string;
+  description: string | null;
+  contractAmount: number;
+  triggerCondition: string;
+  percentageOfContract: number;
+  status: "pending" | "triggered" | "billed" | "paid";
+  triggeredAt: string | null;
+  billedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TaskProfitAnalysis {
+  id: string;
+  taskId: string;
+  profitImpactScore: number;
+  costEffectivenessScore: number;
+  urgencyScore: number;
+  recommendation: string;
+  createdAt: string;
+}
