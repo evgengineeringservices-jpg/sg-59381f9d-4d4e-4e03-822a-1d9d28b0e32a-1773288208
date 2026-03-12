@@ -95,6 +95,11 @@ export function CRMLayout({ children }: { children: React.ReactNode }) {
     }
   }, [user, router]);
 
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [router.pathname]);
+
   if (!user || !profile) {
     return null;
   }
@@ -111,25 +116,34 @@ export function CRMLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Mobile Header - Updated for better touch targets */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-primary text-primary-foreground border-b border-primary-foreground/20">
         <div className="flex items-center justify-between px-4 h-16">
           <div className="flex items-center gap-2">
             <Building2 className="w-6 h-6 text-accent" />
             <span className="font-heading text-xl tracking-wide">BUILDCORE</span>
           </div>
-          <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-2">
-            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-          </button>
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+            <button 
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)} 
+              className="p-2 hover:bg-primary-foreground/10 rounded-lg transition-colors touch-manipulation"
+              aria-label="Toggle menu"
+            >
+              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            </button>
+          </div>
         </div>
       </div>
 
+      {/* Mobile Menu - Updated for better mobile UX */}
       {mobileMenuOpen && (
         <div className="lg:hidden fixed inset-0 z-40 bg-primary text-primary-foreground pt-16">
           <ScrollArea className="h-full">
-            <div className="p-4 space-y-6">
+            <div className="p-4 space-y-6 pb-24">
               {navigationGroups.map((group) => (
                 <div key={group.label}>
-                  <h3 className="text-xs font-semibold text-primary-foreground/60 mb-2 px-2">{group.label}</h3>
+                  <h3 className="text-xs font-semibold text-primary-foreground/60 mb-3 px-2 uppercase tracking-wider">{group.label}</h3>
                   <nav className="space-y-1">
                     {group.items.filter(canAccessItem).map((item) => {
                       const Icon = item.icon;
@@ -137,11 +151,11 @@ export function CRMLayout({ children }: { children: React.ReactNode }) {
                       return (
                         <Link key={item.href} href={item.href} onClick={() => setMobileMenuOpen(false)}>
                           <div className={cn(
-                            "flex items-center gap-3 px-3 py-2 rounded-lg transition-colors",
-                            isActive ? "bg-accent text-accent-foreground" : "hover:bg-primary-foreground/10"
+                            "flex items-center gap-4 px-4 py-3 rounded-lg transition-colors touch-manipulation",
+                            isActive ? "bg-accent text-accent-foreground" : "hover:bg-primary-foreground/10 active:bg-primary-foreground/20"
                           )}>
-                            <Icon className="w-5 h-5" />
-                            <span className="text-sm font-medium">{item.label}</span>
+                            <Icon className="w-5 h-5 shrink-0" />
+                            <span className="text-base font-medium">{item.label}</span>
                           </div>
                         </Link>
                       );
@@ -149,13 +163,36 @@ export function CRMLayout({ children }: { children: React.ReactNode }) {
                   </nav>
                 </div>
               ))}
-              <div className="pt-4 border-t border-primary-foreground/20">
+              
+              {/* Mobile User Profile Section */}
+              <div className="pt-4 border-t border-primary-foreground/20 space-y-2">
+                <div className="flex items-center gap-3 px-4 py-3">
+                  <Avatar className="w-10 h-10">
+                    <AvatarImage src={profile.avatarUrl || undefined} />
+                    <AvatarFallback className="bg-accent text-accent-foreground">
+                      {profile.displayName?.charAt(0) || profile.email.charAt(0)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <div className="text-sm font-medium">{profile.displayName || "User"}</div>
+                    <div className="text-xs text-primary-foreground/60">{profile.role.replace(/_/g, " ")}</div>
+                  </div>
+                </div>
+                
                 <Link href="/" onClick={() => setMobileMenuOpen(false)}>
-                  <div className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-primary-foreground/10 transition-colors">
+                  <div className="flex items-center gap-4 px-4 py-3 rounded-lg hover:bg-primary-foreground/10 transition-colors touch-manipulation">
                     <Building2 className="w-5 h-5" />
-                    <span className="text-sm font-medium">Back to Website</span>
+                    <span className="text-base font-medium">Back to Website</span>
                   </div>
                 </Link>
+                
+                <button 
+                  onClick={() => { setMobileMenuOpen(false); handleSignOut(); }}
+                  className="w-full flex items-center gap-4 px-4 py-3 rounded-lg hover:bg-primary-foreground/10 transition-colors touch-manipulation text-left"
+                >
+                  <LogOut className="w-5 h-5" />
+                  <span className="text-base font-medium">Sign Out</span>
+                </button>
               </div>
             </div>
           </ScrollArea>
@@ -278,7 +315,7 @@ export function CRMLayout({ children }: { children: React.ReactNode }) {
         "pt-16 lg:pt-0",
         sidebarCollapsed ? "lg:ml-20" : "lg:ml-64"
       )}>
-        <div className="p-6 lg:p-8">
+        <div className="p-4 sm:p-6 lg:p-8">
           {children}
         </div>
       </main>

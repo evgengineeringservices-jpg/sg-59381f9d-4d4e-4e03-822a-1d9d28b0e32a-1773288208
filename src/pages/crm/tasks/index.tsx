@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { getProjects, getTasks, createTask, updateTask, deleteTask } from "@/services/crmService";
-import { Plus, Search, Edit2, Trash2, AlertCircle, CheckCircle2, Clock } from "lucide-react";
+import { Plus, Search, Edit2, Trash2, AlertCircle, CheckCircle2, Clock, Edit, Sparkles, FolderKanban, Calendar, User, CheckSquare } from "lucide-react";
 import type { Project, Task, TaskStatus, TaskPriority } from "@/types";
 
 export default function TasksPage() {
@@ -185,251 +185,342 @@ export default function TasksPage() {
 
   return (
     <CRMLayout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="space-y-4 sm:space-y-6">
+        {/* Header - Mobile Optimized */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="font-heading text-3xl md:text-4xl mb-2 tracking-wide">TASKS</h1>
-            <p className="text-muted-foreground">Manage project tasks and assignments</p>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Tasks</h1>
+            <p className="text-sm sm:text-base text-muted-foreground">
+              Manage project tasks and assignments
+            </p>
           </div>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={() => handleOpenDialog()} className="bg-accent hover:bg-accent/90 text-accent-foreground">
-                <Plus className="w-4 h-4 mr-2" />
-                New Task
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>{editingTask ? "Edit Task" : "Create New Task"}</DialogTitle>
-                <DialogDescription>
-                  {editingTask ? "Update task details" : "Add a new task"}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="title">Task Title *</Label>
-                  <Input
-                    id="title"
-                    value={formData.title}
-                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                    placeholder="Prepare Week 3 materials procurement"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="description">Description *</Label>
-                  <Textarea
-                    id="description"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Task details..."
-                    rows={3}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="projectId">Project *</Label>
-                    <Select
-                      value={formData.projectId}
-                      onValueChange={(value) => setFormData({ ...formData, projectId: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {projects.map((project) => (
-                          <SelectItem key={project.id} value={project.id}>
-                            {project.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="phaseId">Phase ID</Label>
-                    <Input
-                      id="phaseId"
-                      value={formData.phaseId}
-                      onChange={(e) => setFormData({ ...formData, phaseId: e.target.value })}
-                      placeholder="Mobilization Phase ID"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="assignedRole">Assigned Role</Label>
-                    <Input
-                      id="assignedRole"
-                      value={formData.assignedRole}
-                      onChange={(e) => setFormData({ ...formData, assignedRole: e.target.value })}
-                      placeholder="Project Engineer"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="dueDate">Due Date *</Label>
-                    <Input
-                      id="dueDate"
-                      type="date"
-                      value={formData.dueDate}
-                      onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="priority">Priority *</Label>
-                    <Select
-                      value={formData.priority}
-                      onValueChange={(value) => setFormData({ ...formData, priority: value as TaskPriority })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="low">Low</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                        <SelectItem value="critical">Critical</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="status">Status *</Label>
-                    <Select
-                      value={formData.status}
-                      onValueChange={(value) => setFormData({ ...formData, status: value as TaskStatus })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="todo">To Do</SelectItem>
-                        <SelectItem value="in_progress">In Progress</SelectItem>
-                        <SelectItem value="blocked">Blocked</SelectItem>
-                        <SelectItem value="done">Done</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleSubmit} className="bg-accent hover:bg-accent/90 text-accent-foreground">
-                  {editingTask ? "Update Task" : "Create Task"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <Button onClick={() => setShowDialog(true)} size="default" className="touch-manipulation">
+            <Plus className="mr-2 w-4 h-4" />
+            New Task
+          </Button>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        {/* Filters - Mobile Optimized with Horizontal Scroll */}
+        <div className="flex flex-col gap-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
             <Input
               placeholder="Search tasks..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
+              className="pl-9 touch-manipulation"
             />
           </div>
-          <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as TaskStatus | "all")}>
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="todo">To Do</SelectItem>
-              <SelectItem value="in_progress">In Progress</SelectItem>
-              <SelectItem value="blocked">Blocked</SelectItem>
-              <SelectItem value="done">Done</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0">
+            <Select value={filterProject} onValueChange={setFilterProject}>
+              <SelectTrigger className="w-[140px] shrink-0 touch-manipulation">
+                <SelectValue placeholder="Project" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Projects</SelectItem>
+                {projects.map((project) => (
+                  <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-[130px] shrink-0 touch-manipulation">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                {Object.entries(TASK_STATUS).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterPriority} onValueChange={setFilterPriority}>
+              <SelectTrigger className="w-[130px] shrink-0 touch-manipulation">
+                <SelectValue placeholder="Priority" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Priority</SelectItem>
+                {Object.entries(TASK_PRIORITY).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
-        {filteredTasks.length === 0 ? (
-          <Card className="shadow-card">
-            <CardContent className="flex flex-col items-center justify-center py-16">
-              <div className="text-muted-foreground mb-4">No tasks found</div>
-              <Button onClick={() => handleOpenDialog()} className="bg-accent hover:bg-accent/90 text-accent-foreground">
-                <Plus className="w-4 h-4 mr-2" />
-                Create Your First Task
-              </Button>
+        {/* Tasks List - Mobile Optimized Card View */}
+        <div className="space-y-3">
+          {filteredTasks.map((task) => (
+            <Card key={task.id} className="hover:shadow-md transition-shadow">
+              <CardContent className="p-4 sm:p-6">
+                <div className="space-y-3">
+                  {/* Header */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-base sm:text-lg truncate">{task.title}</h3>
+                      {task.description && (
+                        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{task.description}</p>
+                      )}
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleEdit(task)}
+                        className="touch-manipulation h-9 w-9"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDelete(task.id)}
+                        className="touch-manipulation h-9 w-9"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Badges - Responsive */}
+                  <div className="flex flex-wrap gap-2">
+                    <Badge
+                      variant={
+                        task.status === "done"
+                          ? "default"
+                          : task.status === "in_progress"
+                          ? "secondary"
+                          : task.status === "blocked"
+                          ? "destructive"
+                          : "outline"
+                      }
+                    >
+                      <StatusIcon className="w-3 h-3 mr-1" />
+                      {TASK_STATUS[task.status]}
+                    </Badge>
+                    <Badge
+                      variant={
+                        task.priority === "critical"
+                          ? "destructive"
+                          : task.priority === "high"
+                          ? "default"
+                          : "outline"
+                      }
+                    >
+                      <PriorityIcon className="w-3 h-3 mr-1" />
+                      {TASK_PRIORITY[task.priority]}
+                    </Badge>
+                    {task.source === "auto_generated" && (
+                      <Badge variant="secondary">
+                        <Sparkles className="w-3 h-3 mr-1" />
+                        Auto
+                      </Badge>
+                    )}
+                  </div>
+
+                  {/* Details Grid - Mobile Optimized */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                    {task.projectId && (
+                      <div className="flex items-center gap-2">
+                        <FolderKanban className="w-4 h-4 text-muted-foreground shrink-0" />
+                        <span className="truncate">
+                          {projects.find((p) => p.id === task.projectId)?.name || "Unknown Project"}
+                        </span>
+                      </div>
+                    )}
+                    {task.dueDate && (
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
+                        <span className={cn(
+                          "truncate",
+                          new Date(task.dueDate) < new Date() && task.status !== "done" && "text-destructive font-medium"
+                        )}>
+                          {new Date(task.dueDate).toLocaleDateString("en-PH", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
+                        </span>
+                      </div>
+                    )}
+                    {task.assignedTo && (
+                      <div className="flex items-center gap-2">
+                        <User className="w-4 h-4 text-muted-foreground shrink-0" />
+                        <span className="truncate">Assigned</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Quick Status Update - Mobile Only */}
+                  <div className="sm:hidden flex gap-2 pt-2 border-t">
+                    {task.status !== "done" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 touch-manipulation"
+                        onClick={() => handleQuickStatusUpdate(task.id, "in_progress")}
+                      >
+                        Start
+                      </Button>
+                    )}
+                    {task.status === "in_progress" && (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="flex-1 touch-manipulation"
+                        onClick={() => handleQuickStatusUpdate(task.id, "done")}
+                      >
+                        Complete
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {filteredTasks.length === 0 && (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <CheckSquare className="w-12 h-12 text-muted-foreground mb-4" />
+              <p className="text-center text-muted-foreground">
+                {searchQuery || filterProject !== "all" || filterStatus !== "all"
+                  ? "No tasks match your filters"
+                  : "No tasks yet. Create your first task to get started."}
+              </p>
             </CardContent>
           </Card>
-        ) : (
-          <div className="space-y-4">
-            {filteredTasks.map((task) => {
-              const StatusIcon = getStatusIcon(task.status);
-              const project = projects.find(p => p.id === task.projectId);
-              return (
-                <Card key={task.id} className="shadow-card hover:shadow-premium transition-shadow">
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex items-start gap-3 flex-1">
-                        <div className={`w-10 h-10 rounded-lg ${getStatusColor(task.status)} flex items-center justify-center flex-shrink-0`}>
-                          <StatusIcon className="w-5 h-5" />
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-lg mb-1">{task.title}</h3>
-                          <p className="text-sm text-muted-foreground mb-3">{task.description}</p>
-                          <div className="flex flex-wrap gap-2">
-                            <Badge className={getStatusColor(task.status)}>
-                              {task.status.replace("_", " ")}
-                            </Badge>
-                            <Badge className={getPriorityColor(task.priority)}>
-                              {task.priority}
-                            </Badge>
-                            {project && (
-                              <Badge variant="outline">{project.name}</Badge>
-                            )}
-                            {task.phaseId && (
-                              <Badge variant="outline">Phase: {task.phaseId}</Badge>
-                            )}
-                            {task.source === "auto_generated" && (
-                              <Badge variant="outline" className="border-accent text-accent">
-                                Auto-generated
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleOpenDialog(task)}
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(task.id)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between text-sm pt-4 border-t">
-                      <div className="flex items-center gap-4 text-muted-foreground">
-                        {task.assignedRole && (
-                          <span>Assigned: {task.assignedRole}</span>
-                        )}
-                        <span>Due: {new Date(task.dueDate).toLocaleDateString()}</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
         )}
+
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{editingTask ? "Edit Task" : "Create New Task"}</DialogTitle>
+              <DialogDescription>
+                {editingTask ? "Update task details" : "Add a new task"}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="title">Task Title *</Label>
+                <Input
+                  id="title"
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  placeholder="Prepare Week 3 materials procurement"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="description">Description *</Label>
+                <Textarea
+                  id="description"
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="Task details..."
+                  rows={3}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="projectId">Project *</Label>
+                  <Select
+                    value={formData.projectId}
+                    onValueChange={(value) => setFormData({ ...formData, projectId: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {projects.map((project) => (
+                        <SelectItem key={project.id} value={project.id}>
+                          {project.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phaseId">Phase ID</Label>
+                  <Input
+                    id="phaseId"
+                    value={formData.phaseId}
+                    onChange={(e) => setFormData({ ...formData, phaseId: e.target.value })}
+                    placeholder="Mobilization Phase ID"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="assignedRole">Assigned Role</Label>
+                  <Input
+                    id="assignedRole"
+                    value={formData.assignedRole}
+                    onChange={(e) => setFormData({ ...formData, assignedRole: e.target.value })}
+                    placeholder="Project Engineer"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="dueDate">Due Date *</Label>
+                  <Input
+                    id="dueDate"
+                    type="date"
+                    value={formData.dueDate}
+                    onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="priority">Priority *</Label>
+                  <Select
+                    value={formData.priority}
+                    onValueChange={(value) => setFormData({ ...formData, priority: value as TaskPriority })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="critical">Critical</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="status">Status *</Label>
+                  <Select
+                    value={formData.status}
+                    onValueChange={(value) => setFormData({ ...formData, status: value as TaskStatus })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todo">To Do</SelectItem>
+                      <SelectItem value="in_progress">In Progress</SelectItem>
+                      <SelectItem value="blocked">Blocked</SelectItem>
+                      <SelectItem value="done">Done</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSubmit} className="bg-accent hover:bg-accent/90 text-accent-foreground">
+                {editingTask ? "Update Task" : "Create Task"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </CRMLayout>
   );
