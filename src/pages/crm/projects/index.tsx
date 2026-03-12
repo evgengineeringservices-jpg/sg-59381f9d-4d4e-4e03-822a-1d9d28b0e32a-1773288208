@@ -23,14 +23,19 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { getProjects, createProject, updateProject, deleteProject } from "@/services/crmService";
-import { formatPeso, PROJECT_TYPES, PCAB_CATEGORIES } from "@/constants";
-import { Plus, Search, Edit2, Trash2, MapPin, Calendar, DollarSign, Edit, FolderKanban } from "lucide-react";
+import { formatPeso, PROJECT_TYPES, PCAB_CATEGORIES, PROJECT_STATUS, PERMIT_STATUS } from "@/constants";
+import { Plus, Search, Edit2, Trash2, MapPin, Calendar, DollarSign, Edit, FolderKanban, FileSpreadsheet, Printer } from "lucide-react";
 import type { Project, ProjectStatus, ProjectType, PCabCategory, PermitStatus } from "@/types";
+import { toast } from "@/sonnerie";
+import { exportProjectsToExcel, printElement } from "@/lib/exportUtils";
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [filteredProjects, setFilteredProjects] = useState<Project[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterType, setFilterType] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterPermit, setFilterPermit] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -58,13 +63,17 @@ export default function ProjectsPage() {
   }, []);
 
   useEffect(() => {
-    const filtered = projects.filter((project) =>
-      project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      project.client.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      project.location.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const filtered = projects.filter((project) => {
+      const matchesSearch = project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        project.client.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        project.location.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesType = filterType === "all" || project.projectType === filterType;
+      const matchesStatus = filterStatus === "all" || project.status === filterStatus;
+      const matchesPermit = filterPermit === "all" || project.permitStatus === filterPermit;
+      return matchesSearch && matchesType && matchesStatus && matchesPermit;
+    });
     setFilteredProjects(filtered);
-  }, [searchQuery, projects]);
+  }, [searchQuery, filterType, filterStatus, filterPermit, projects]);
 
   async function loadProjects() {
     try {
@@ -78,26 +87,31 @@ export default function ProjectsPage() {
     }
   }
 
+  function handleEdit(project: Project) {
+    setEditingProject(project);
+    setFormData({
+      name: project.name,
+      client: project.client,
+      status: project.status,
+      progress: project.progress,
+      startDate: project.startDate,
+      endDate: project.endDate || "",
+      budget: project.budget,
+      spent: project.spent,
+      projectType: project.projectType,
+      location: project.location,
+      contractAmount: project.contractAmount,
+      pcabCategory: project.pcabCategory,
+      permitNo: project.permitNo || "",
+      permitStatus: project.permitStatus,
+      description: project.description || "",
+    });
+    setDialogOpen(true);
+  }
+
   function handleOpenDialog(project?: Project) {
     if (project) {
-      setEditingProject(project);
-      setFormData({
-        name: project.name,
-        client: project.client,
-        status: project.status,
-        progress: project.progress,
-        startDate: project.startDate,
-        endDate: project.endDate || "",
-        budget: project.budget,
-        spent: project.spent,
-        projectType: project.projectType,
-        location: project.location,
-        contractAmount: project.contractAmount,
-        pcabCategory: project.pcabCategory,
-        permitNo: project.permitNo || "",
-        permitStatus: project.permitStatus,
-        description: project.description || "",
-      });
+      handleEdit(project);
     } else {
       setEditingProject(null);
       setFormData({
@@ -117,8 +131,8 @@ export default function ProjectsPage() {
         permitStatus: "not_applied",
         description: "",
       });
+      setDialogOpen(true);
     }
-    setDialogOpen(true);
   }
 
   async function handleSubmit() {
@@ -145,25 +159,21 @@ export default function ProjectsPage() {
     }
   }
 
-  const getStatusColor = (status: ProjectStatus) => {
-    switch (status) {
-      case "planning": return "bg-blue-100 text-blue-700";
-      case "active": return "bg-green-100 text-green-700";
-      case "on_hold": return "bg-yellow-100 text-yellow-700";
-      case "completed": return "bg-purple-100 text-purple-700";
-      case "cancelled": return "bg-red-100 text-red-700";
-      default: return "bg-gray-100 text-gray-700";
+  const handleExport = () => {
+    if (filteredProjects.length === 0) {
+      toast({ title: "No projects to export", variant: "destructive" });
+      return;
     }
+    exportProjectsToExcel(filteredProjects);
+    toast({ title: "Projects exported to Excel successfully!" });
   };
 
-  const getPermitColor = (status: PermitStatus) => {
-    switch (status) {
-      case "approved": return "bg-green-100 text-green-700";
-      case "application_submitted": return "bg-blue-100 text-blue-700";
-      case "rejected": return "bg-red-100 text-red-700";
-      case "expired": return "bg-orange-100 text-orange-700";
-      default: return "bg-gray-100 text-gray-700";
+  const handlePrint = () => {
+    if (filteredProjects.length === 0) {
+      toast({ title: "No projects to print", variant: "destructive" });
+      return;
     }
+    printElement("projects-list", "PROJECTS REPORT");
   };
 
   if (loading) {
@@ -187,10 +197,20 @@ export default function ProjectsPage() {
               Manage construction projects and track progress
             </p>
           </div>
-          <Button onClick={() => setShowDialog(true)} size="default" className="touch-manipulation">
-            <Plus className="mr-2 w-4 h-4" />
-            New Project
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={handleExport}>
+              <FileSpreadsheet className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Export</span>
+            </Button>
+            <Button variant="outline" size="sm" onClick={handlePrint}>
+              <Printer className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Print</span>
+            </Button>
+            <Button onClick={() => setDialogOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Add Project
+            </Button>
+          </div>
         </div>
 
         {/* Filters - Mobile Optimized */}
@@ -211,8 +231,8 @@ export default function ProjectsPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Types</SelectItem>
-                {Object.entries(PROJECT_TYPES).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>{label}</SelectItem>
+                {PROJECT_TYPES.map((type) => (
+                  <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -241,146 +261,142 @@ export default function ProjectsPage() {
           </div>
         </div>
 
-        {/* Projects Grid - Mobile Optimized */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-          {filteredProjects.map((project) => (
-            <Card key={project.id} className="hover:shadow-lg transition-shadow">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <CardTitle className="text-lg sm:text-xl truncate">{project.name}</CardTitle>
-                    <CardDescription className="mt-1 text-sm truncate">{project.client}</CardDescription>
+        <div id="projects-list">
+          {/* Projects Grid - Mobile Optimized */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+            {filteredProjects.map((project) => (
+              <Card key={project.id} className="hover:shadow-lg transition-shadow">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <CardTitle className="text-lg sm:text-xl truncate">{project.name}</CardTitle>
+                      <CardDescription className="mt-1 text-sm truncate">{project.client}</CardDescription>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleEdit(project)}
+                        className="touch-manipulation shrink-0"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDelete(project.id)}
+                        className="touch-manipulation shrink-0"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleEdit(project)}
-                      className="touch-manipulation shrink-0"
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Badges - Responsive */}
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant={project.status === "active" ? "default" : "secondary"}>
+                      {PROJECT_STATUS[project.status as keyof typeof PROJECT_STATUS]}
+                    </Badge>
+                    <Badge variant="outline">{PROJECT_TYPES.find(t => t.value === project.projectType)?.label}</Badge>
+                    {project.pcabCategory && (
+                      <Badge variant="outline">PCAB {project.pcabCategory}</Badge>
+                    )}
+                    <Badge
+                      variant={
+                        project.permitStatus === "approved"
+                          ? "default"
+                          : project.permitStatus === "rejected"
+                          ? "destructive"
+                          : "secondary"
+                      }
                     >
-                      <Edit className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDelete(project.id)}
-                      className="touch-manipulation shrink-0"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                      {PERMIT_STATUS[project.permitStatus as keyof typeof PERMIT_STATUS]}
+                    </Badge>
                   </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Badges - Responsive */}
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant={project.status === "active" ? "default" : "secondary"}>
-                    {PROJECT_STATUS[project.status]}
-                  </Badge>
-                  <Badge variant="outline">{PROJECT_TYPES[project.projectType]}</Badge>
-                  {project.pcabCategory && (
-                    <Badge variant="outline">PCAB {project.pcabCategory}</Badge>
-                  )}
-                  <Badge
-                    variant={
-                      project.permitStatus === "approved"
-                        ? "default"
-                        : project.permitStatus === "rejected"
-                        ? "destructive"
-                        : "secondary"
-                    }
-                  >
-                    {PERMIT_STATUS[project.permitStatus]}
-                  </Badge>
-                </div>
 
-                {/* Details Grid - Mobile Optimized */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
-                    <span className="truncate">{project.location}</span>
+                  {/* Details Grid - Mobile Optimized */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <span className="truncate">{project.location}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <span className="truncate">
+                        {new Date(project.startDate).toLocaleDateString("en-PH", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
-                    <span className="truncate">
-                      {new Date(project.startDate).toLocaleDateString("en-PH", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
-                    </span>
-                  </div>
-                </div>
 
-                {/* Progress Bar */}
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Progress</span>
-                    <span className="font-medium">{project.progress}%</span>
+                  {/* Progress Bar */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Progress</span>
+                      <span className="font-medium">{project.progress}%</span>
+                    </div>
+                    <div className="w-full bg-muted rounded-full h-2.5">
+                      <div
+                        className="bg-primary h-2.5 rounded-full transition-all"
+                        style={{ width: `${project.progress}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="w-full bg-muted rounded-full h-2.5">
-                    <div
-                      className="bg-primary h-2.5 rounded-full transition-all"
-                      style={{ width: `${project.progress}%` }}
-                    />
-                  </div>
-                </div>
 
-                {/* Budget Info - Mobile Optimized */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Contract Amount</p>
-                    <p className="text-base sm:text-lg font-semibold">
-                      {new Intl.NumberFormat("en-PH", {
-                        style: "currency",
-                        currency: "PHP",
-                        minimumFractionDigits: 0,
-                      }).format(project.contractAmount)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Budget Spent</p>
-                    <p className="text-base sm:text-lg font-semibold">
-                      {new Intl.NumberFormat("en-PH", {
-                        style: "currency",
-                        currency: "PHP",
-                        minimumFractionDigits: 0,
-                      }).format(project.spent)}{" "}
-                      <span className="text-xs text-muted-foreground">
-                        / {new Intl.NumberFormat("en-PH", {
+                  {/* Budget Info - Mobile Optimized */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Contract Amount</p>
+                      <p className="text-base sm:text-lg font-semibold">
+                        {new Intl.NumberFormat("en-PH", {
                           style: "currency",
                           currency: "PHP",
                           minimumFractionDigits: 0,
-                        }).format(project.budget)}
-                      </span>
-                    </p>
+                        }).format(project.contractAmount)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Budget Spent</p>
+                      <p className="text-base sm:text-lg font-semibold">
+                        {new Intl.NumberFormat("en-PH", {
+                          style: "currency",
+                          currency: "PHP",
+                          minimumFractionDigits: 0,
+                        }).format(project.spent)}{" "}
+                        <span className="text-xs text-muted-foreground">
+                          / {new Intl.NumberFormat("en-PH", {
+                            style: "currency",
+                            currency: "PHP",
+                            minimumFractionDigits: 0,
+                          }).format(project.budget)}
+                        </span>
+                      </p>
+                    </div>
                   </div>
-                </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {filteredProjects.length === 0 && (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <FolderKanban className="w-12 h-12 text-muted-foreground mb-4" />
+                <p className="text-center text-muted-foreground">
+                  {searchQuery || filterType !== "all" || filterStatus !== "all"
+                    ? "No projects match your filters"
+                    : "No projects yet. Create your first project to get started."}
+                </p>
               </CardContent>
             </Card>
-          ))}
+          )}
         </div>
 
-        {filteredProjects.length === 0 && (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <FolderKanban className="w-12 h-12 text-muted-foreground mb-4" />
-              <p className="text-center text-muted-foreground">
-                {searchQuery || filterType !== "all" || filterStatus !== "all"
-                  ? "No projects match your filters"
-                  : "No projects yet. Create your first project to get started."}
-              </p>
-            </CardContent>
-          </Card>
-        )}
-
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => handleOpenDialog()} className="bg-accent hover:bg-accent/90 text-accent-foreground">
-              <Plus className="w-4 h-4 mr-2" />
-              New Project
-            </Button>
-          </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editingProject ? "Edit Project" : "Create New Project"}</DialogTitle>

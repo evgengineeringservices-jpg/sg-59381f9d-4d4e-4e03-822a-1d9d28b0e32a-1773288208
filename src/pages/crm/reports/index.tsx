@@ -1,17 +1,16 @@
 import { useState, useEffect } from "react";
 import { CRMLayout } from "@/components/layout/CRMLayout";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Calendar, User, FileText, Image, Trash2, Edit, ClipboardCheck, CheckCircle } from "lucide-react";
+import { Plus, Calendar, Image, Trash2, Edit, ClipboardCheck, CheckCircle } from "lucide-react";
 import { getProgressReports, createProgressReport, updateProgressReport, deleteProgressReport, getProjects } from "@/services/crmService";
 import type { ProgressReport, Project } from "@/types";
-import { format } from "date-fns";
 
 export default function ReportsPage() {
   const [reports, setReports] = useState<ProgressReport[]>([]);
@@ -32,7 +31,7 @@ export default function ReportsPage() {
     linkedPhaseId: "",
     linkedBoqItemId: "",
     sitePhotos: [] as string[],
-    authorId: "system", // Fallback, should be actual auth user
+    authorId: "system",
     milestoneCompleted: false,
   });
 
@@ -56,24 +55,29 @@ export default function ReportsPage() {
     }
   }
 
+  function handleEdit(report: ProgressReport) {
+    setEditingReport(report);
+    setFormData({
+      projectId: report.projectId,
+      title: report.title,
+      date: report.date,
+      description: report.description || "",
+      progressPercentage: report.progressPercentage,
+      weather: report.weather || "",
+      manpower: report.manpower || 0,
+      remarks: report.remarks || "",
+      linkedPhaseId: report.linkedPhaseId || "",
+      linkedBoqItemId: report.linkedBoqItemId || "",
+      sitePhotos: report.sitePhotos || [],
+      authorId: report.authorId || "system",
+      milestoneCompleted: report.milestoneCompleted || false,
+    });
+    setDialogOpen(true);
+  }
+
   function handleOpenDialog(report?: ProgressReport) {
     if (report) {
-      setEditingReport(report);
-      setFormData({
-        projectId: report.projectId,
-        title: report.title,
-        date: report.date,
-        description: report.description || "",
-        progressPercentage: report.progressPercentage,
-        weather: report.weather || "",
-        manpower: report.manpower || 0,
-        remarks: report.remarks || "",
-        linkedPhaseId: report.linkedPhaseId || "",
-        linkedBoqItemId: report.linkedBoqItemId || "",
-        sitePhotos: report.sitePhotos || [],
-        authorId: report.authorId || "system",
-        milestoneCompleted: report.milestoneCompleted || false,
-      });
+      handleEdit(report);
     } else {
       setEditingReport(null);
       setFormData({
@@ -91,8 +95,8 @@ export default function ReportsPage() {
         authorId: "system",
         milestoneCompleted: false,
       });
+      setDialogOpen(true);
     }
-    setDialogOpen(true);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -123,15 +127,6 @@ export default function ReportsPage() {
 
   const filteredReports = reports;
 
-  const handleQuickStatusUpdate = async (taskId: string, newStatus: string) => {
-    try {
-      await updateTask(taskId, { status: newStatus });
-      loadTasks();
-    } catch (error) {
-      console.error("Failed to update task:", error);
-    }
-  };
-
   return (
     <CRMLayout>
       <div className="space-y-4 sm:space-y-6">
@@ -143,7 +138,7 @@ export default function ReportsPage() {
               Track project accomplishments and site updates
             </p>
           </div>
-          <Button onClick={() => setShowDialog(true)} size="default" className="touch-manipulation">
+          <Button onClick={() => handleOpenDialog()} size="default" className="touch-manipulation">
             <Plus className="mr-2 w-4 h-4" />
             New Report
           </Button>
@@ -151,8 +146,8 @@ export default function ReportsPage() {
 
         {/* Filters - Mobile Optimized */}
         <div className="flex flex-col sm:flex-row gap-3">
-          <Select value={selectedProject} onValueChange={setSelectedProject} className="flex-1">
-            <SelectTrigger className="touch-manipulation">
+          <Select value={selectedProject} onValueChange={setSelectedProject}>
+            <SelectTrigger className="flex-1 touch-manipulation">
               <SelectValue placeholder="Select project" />
             </SelectTrigger>
             <SelectContent>
@@ -166,7 +161,7 @@ export default function ReportsPage() {
 
         {/* Reports List - Mobile Optimized Timeline */}
         <div className="space-y-4">
-          {filteredReports.map((report, index) => (
+          {filteredReports.map((report) => (
             <Card key={report.id} className="hover:shadow-md transition-shadow">
               <CardContent className="p-4 sm:p-6">
                 <div className="space-y-4">
@@ -289,12 +284,6 @@ export default function ReportsPage() {
         )}
 
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => handleOpenDialog()} className="bg-gold hover:bg-gold/90">
-              <Plus className="h-4 w-4 mr-2" />
-              New Report
-            </Button>
-          </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editingReport ? "Edit Report" : "Create Progress Report"}</DialogTitle>
@@ -405,7 +394,7 @@ export default function ReportsPage() {
                 <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button type="submit" className="bg-gold hover:bg-gold/90">
+                <Button type="submit" className="bg-accent hover:bg-accent/90 text-accent-foreground">
                   {editingReport ? "Update Report" : "Create Report"}
                 </Button>
               </div>

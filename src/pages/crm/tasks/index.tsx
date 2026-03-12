@@ -11,7 +11,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import {
@@ -23,15 +22,21 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { getProjects, getTasks, createTask, updateTask, deleteTask } from "@/services/crmService";
-import { Plus, Search, Edit2, Trash2, AlertCircle, CheckCircle2, Clock, Edit, Sparkles, FolderKanban, Calendar, User, CheckSquare } from "lucide-react";
+import { TASK_STATUS, TASK_PRIORITY } from "@/constants";
+import { Plus, Search, Trash2, AlertCircle, CheckCircle2, Clock, Edit, Sparkles, FolderKanban, Calendar, User, CheckSquare, FileSpreadsheet, Printer } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { Project, Task, TaskStatus, TaskPriority } from "@/types";
+import { exportTasksToExcel, printElement } from "@/lib/exportUtils";
+import { toast } from "@/sonnerie";
 
 export default function TasksPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [filteredTasks, setFilteredTasks] = useState<Task[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<TaskStatus | "all">("all");
+  const [filterProject, setFilterProject] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterPriority, setFilterPriority] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -56,12 +61,14 @@ export default function TasksPage() {
   useEffect(() => {
     const filtered = tasks.filter((task) => {
       const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        task.description.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesStatus = statusFilter === "all" || task.status === statusFilter;
-      return matchesSearch && matchesStatus;
+        (task.description && task.description.toLowerCase().includes(searchQuery.toLowerCase()));
+      const matchesProject = filterProject === "all" || task.projectId === filterProject;
+      const matchesStatus = filterStatus === "all" || task.status === filterStatus;
+      const matchesPriority = filterPriority === "all" || task.priority === filterPriority;
+      return matchesSearch && matchesProject && matchesStatus && matchesPriority;
     });
     setFilteredTasks(filtered);
-  }, [searchQuery, statusFilter, tasks]);
+  }, [searchQuery, filterProject, filterStatus, filterPriority, tasks]);
 
   async function loadData() {
     try {
@@ -79,21 +86,26 @@ export default function TasksPage() {
     }
   }
 
+  function handleEdit(task: Task) {
+    setEditingTask(task);
+    setFormData({
+      title: task.title,
+      description: task.description || "",
+      projectId: task.projectId || "",
+      phaseId: task.phaseId || "",
+      assignedTo: task.assignedTo || "",
+      assignedRole: task.assignedRole || "",
+      dueDate: task.dueDate || "",
+      priority: task.priority,
+      status: task.status,
+      source: task.source,
+    });
+    setDialogOpen(true);
+  }
+
   function handleOpenDialog(task?: Task) {
     if (task) {
-      setEditingTask(task);
-      setFormData({
-        title: task.title,
-        description: task.description || "",
-        projectId: task.projectId || "",
-        phaseId: task.phaseId || "",
-        assignedTo: task.assignedTo || "",
-        assignedRole: task.assignedRole || "",
-        dueDate: task.dueDate || "",
-        priority: task.priority,
-        status: task.status,
-        source: task.source,
-      });
+      handleEdit(task);
     } else {
       setEditingTask(null);
       setFormData({
@@ -108,8 +120,8 @@ export default function TasksPage() {
         status: "todo",
         source: "manual",
       });
+      setDialogOpen(true);
     }
-    setDialogOpen(true);
   }
 
   async function handleSubmit() {
@@ -145,24 +157,30 @@ export default function TasksPage() {
     }
   }
 
-  const getStatusColor = (status: TaskStatus) => {
-    switch (status) {
-      case "todo": return "bg-gray-100 text-gray-700";
-      case "in_progress": return "bg-blue-100 text-blue-700";
-      case "blocked": return "bg-red-100 text-red-700";
-      case "done": return "bg-green-100 text-green-700";
-      default: return "bg-gray-100 text-gray-700";
+  async function handleQuickStatusUpdate(taskId: string, newStatus: TaskStatus) {
+    try {
+      await updateTask(taskId, { status: newStatus });
+      loadData();
+    } catch (error) {
+      console.error("Failed to update task:", error);
     }
+  }
+
+  const handleExport = () => {
+    if (filteredTasks.length === 0) {
+      toast({ title: "No tasks to export", variant: "destructive" });
+      return;
+    }
+    exportTasksToExcel(filteredTasks);
+    toast({ title: "Tasks exported to Excel successfully!" });
   };
 
-  const getPriorityColor = (priority: TaskPriority) => {
-    switch (priority) {
-      case "low": return "bg-gray-100 text-gray-700";
-      case "medium": return "bg-yellow-100 text-yellow-700";
-      case "high": return "bg-orange-100 text-orange-700";
-      case "critical": return "bg-red-100 text-red-700";
-      default: return "bg-gray-100 text-gray-700";
+  const handlePrint = () => {
+    if (filteredTasks.length === 0) {
+      toast({ title: "No tasks to print", variant: "destructive" });
+      return;
     }
+    printElement("tasks-list", "TASKS REPORT");
   };
 
   const getStatusIcon = (status: TaskStatus) => {
@@ -194,10 +212,20 @@ export default function TasksPage() {
               Manage project tasks and assignments
             </p>
           </div>
-          <Button onClick={() => setShowDialog(true)} size="default" className="touch-manipulation">
-            <Plus className="mr-2 w-4 h-4" />
-            New Task
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={handleExport}>
+              <FileSpreadsheet className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Export</span>
+            </Button>
+            <Button variant="outline" size="sm" onClick={handlePrint}>
+              <Printer className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Print</span>
+            </Button>
+            <Button onClick={() => setDialogOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Add Task
+            </Button>
+          </div>
         </div>
 
         {/* Filters - Mobile Optimized with Horizontal Scroll */}
@@ -249,149 +277,156 @@ export default function TasksPage() {
         </div>
 
         {/* Tasks List - Mobile Optimized Card View */}
-        <div className="space-y-3">
-          {filteredTasks.map((task) => (
-            <Card key={task.id} className="hover:shadow-md transition-shadow">
-              <CardContent className="p-4 sm:p-6">
-                <div className="space-y-3">
-                  {/* Header */}
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-base sm:text-lg truncate">{task.title}</h3>
-                      {task.description && (
-                        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{task.description}</p>
-                      )}
-                    </div>
-                    <div className="flex gap-1 shrink-0">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleEdit(task)}
-                        className="touch-manipulation h-9 w-9"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDelete(task.id)}
-                        className="touch-manipulation h-9 w-9"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* Badges - Responsive */}
-                  <div className="flex flex-wrap gap-2">
-                    <Badge
-                      variant={
-                        task.status === "done"
-                          ? "default"
-                          : task.status === "in_progress"
-                          ? "secondary"
-                          : task.status === "blocked"
-                          ? "destructive"
-                          : "outline"
-                      }
-                    >
-                      <StatusIcon className="w-3 h-3 mr-1" />
-                      {TASK_STATUS[task.status]}
-                    </Badge>
-                    <Badge
-                      variant={
-                        task.priority === "critical"
-                          ? "destructive"
-                          : task.priority === "high"
-                          ? "default"
-                          : "outline"
-                      }
-                    >
-                      <PriorityIcon className="w-3 h-3 mr-1" />
-                      {TASK_PRIORITY[task.priority]}
-                    </Badge>
-                    {task.source === "auto_generated" && (
-                      <Badge variant="secondary">
-                        <Sparkles className="w-3 h-3 mr-1" />
-                        Auto
-                      </Badge>
-                    )}
-                  </div>
-
-                  {/* Details Grid - Mobile Optimized */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-                    {task.projectId && (
-                      <div className="flex items-center gap-2">
-                        <FolderKanban className="w-4 h-4 text-muted-foreground shrink-0" />
-                        <span className="truncate">
-                          {projects.find((p) => p.id === task.projectId)?.name || "Unknown Project"}
-                        </span>
-                      </div>
-                    )}
-                    {task.dueDate && (
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
-                        <span className={cn(
-                          "truncate",
-                          new Date(task.dueDate) < new Date() && task.status !== "done" && "text-destructive font-medium"
-                        )}>
-                          {new Date(task.dueDate).toLocaleDateString("en-PH", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          })}
-                        </span>
-                      </div>
-                    )}
-                    {task.assignedTo && (
-                      <div className="flex items-center gap-2">
-                        <User className="w-4 h-4 text-muted-foreground shrink-0" />
-                        <span className="truncate">Assigned</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Quick Status Update - Mobile Only */}
-                  <div className="sm:hidden flex gap-2 pt-2 border-t">
-                    {task.status !== "done" && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="flex-1 touch-manipulation"
-                        onClick={() => handleQuickStatusUpdate(task.id, "in_progress")}
-                      >
-                        Start
-                      </Button>
-                    )}
-                    {task.status === "in_progress" && (
-                      <Button
-                        size="sm"
-                        variant="default"
-                        className="flex-1 touch-manipulation"
-                        onClick={() => handleQuickStatusUpdate(task.id, "done")}
-                      >
-                        Complete
-                      </Button>
-                    )}
-                  </div>
-                </div>
+        <div id="tasks-list">
+          {filteredTasks.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <CheckSquare className="w-12 h-12 text-muted-foreground mb-4" />
+                <p className="text-center text-muted-foreground">
+                  {searchQuery || filterProject !== "all" || filterStatus !== "all"
+                    ? "No tasks match your filters"
+                    : "No tasks yet. Create your first task to get started."}
+                </p>
               </CardContent>
             </Card>
-          ))}
-        </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredTasks.map((task) => {
+                const StatusIcon = getStatusIcon(task.status);
+                const PriorityIcon = task.priority === "critical" ? AlertCircle : Clock;
+                
+                return (
+                  <Card key={task.id} className="hover:shadow-md transition-shadow">
+                    <CardContent className="p-4 sm:p-6">
+                      <div className="space-y-3">
+                        {/* Header */}
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-base sm:text-lg truncate">{task.title}</h3>
+                            {task.description && (
+                              <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{task.description}</p>
+                            )}
+                          </div>
+                          <div className="flex gap-1 shrink-0">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEdit(task)}
+                              className="touch-manipulation h-9 w-9"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDelete(task.id)}
+                              className="touch-manipulation h-9 w-9"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
 
-        {filteredTasks.length === 0 && (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <CheckSquare className="w-12 h-12 text-muted-foreground mb-4" />
-              <p className="text-center text-muted-foreground">
-                {searchQuery || filterProject !== "all" || filterStatus !== "all"
-                  ? "No tasks match your filters"
-                  : "No tasks yet. Create your first task to get started."}
-              </p>
-            </CardContent>
-          </Card>
-        )}
+                        {/* Badges - Responsive */}
+                        <div className="flex flex-wrap gap-2">
+                          <Badge
+                            variant={
+                              task.status === "done"
+                                ? "default"
+                                : task.status === "in_progress"
+                                ? "secondary"
+                                : task.status === "blocked"
+                                ? "destructive"
+                                : "outline"
+                            }
+                          >
+                            <StatusIcon className="w-3 h-3 mr-1" />
+                            {TASK_STATUS[task.status as keyof typeof TASK_STATUS]}
+                          </Badge>
+                          <Badge
+                            variant={
+                              task.priority === "critical"
+                                ? "destructive"
+                                : task.priority === "high"
+                                ? "default"
+                                : "outline"
+                            }
+                          >
+                            <PriorityIcon className="w-3 h-3 mr-1" />
+                            {TASK_PRIORITY[task.priority as keyof typeof TASK_PRIORITY]}
+                          </Badge>
+                          {task.source === "auto_generated" && (
+                            <Badge variant="secondary">
+                              <Sparkles className="w-3 h-3 mr-1" />
+                              Auto
+                            </Badge>
+                          )}
+                        </div>
+
+                        {/* Details Grid - Mobile Optimized */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                          {task.projectId && (
+                            <div className="flex items-center gap-2">
+                              <FolderKanban className="w-4 h-4 text-muted-foreground shrink-0" />
+                              <span className="truncate">
+                                {projects.find((p) => p.id === task.projectId)?.name || "Unknown Project"}
+                              </span>
+                            </div>
+                          )}
+                          {task.dueDate && (
+                            <div className="flex items-center gap-2">
+                              <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
+                              <span className={cn(
+                                "truncate",
+                                new Date(task.dueDate) < new Date() && task.status !== "done" && "text-destructive font-medium"
+                              )}>
+                                {new Date(task.dueDate).toLocaleDateString("en-PH", {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                })}
+                              </span>
+                            </div>
+                          )}
+                          {task.assignedTo && (
+                            <div className="flex items-center gap-2">
+                              <User className="w-4 h-4 text-muted-foreground shrink-0" />
+                              <span className="truncate">Assigned</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Quick Status Update - Mobile Only */}
+                        <div className="sm:hidden flex gap-2 pt-2 border-t">
+                          {task.status !== "done" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="flex-1 touch-manipulation"
+                              onClick={() => handleQuickStatusUpdate(task.id, "in_progress")}
+                            >
+                              Start
+                            </Button>
+                          )}
+                          {task.status === "in_progress" && (
+                            <Button
+                              size="sm"
+                              variant="default"
+                              className="flex-1 touch-manipulation"
+                              onClick={() => handleQuickStatusUpdate(task.id, "done")}
+                            >
+                              Complete
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">

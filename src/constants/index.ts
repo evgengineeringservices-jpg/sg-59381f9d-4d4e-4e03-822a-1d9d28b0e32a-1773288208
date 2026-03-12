@@ -118,6 +118,36 @@ export const BILLING_STATUSES = [
   { value: "overdue", label: "Overdue" },
 ] as const;
 
+export const PROJECT_STATUS = {
+  planning: "Planning",
+  active: "Active",
+  on_hold: "On Hold",
+  completed: "Completed",
+  cancelled: "Cancelled",
+} as const;
+
+export const PERMIT_STATUS = {
+  not_applied: "Not Applied",
+  application_submitted: "Application Submitted",
+  approved: "Approved",
+  rejected: "Rejected",
+  expired: "Expired",
+} as const;
+
+export const TASK_STATUS = {
+  todo: "To Do",
+  in_progress: "In Progress",
+  blocked: "Blocked",
+  done: "Done",
+} as const;
+
+export const TASK_PRIORITY = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  critical: "Critical",
+} as const;
+
 // Utility function for currency formatting
 export const formatPeso = (amount: number): string => {
   return new Intl.NumberFormat("en-PH", {

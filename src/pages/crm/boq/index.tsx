@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, RefreshCw, TrendingUp, DollarSign, Wrench, Package, Search, SlidersHorizontal, ArrowUpDown } from "lucide-react";
+import { Plus, RefreshCw, TrendingUp, DollarSign, Wrench, Package, Search, SlidersHorizontal, ArrowUpDown, FileSpreadsheet, Printer } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +32,7 @@ import { refreshBOQCostsFromMarket, checkMarketPriceChanges } from "@/lib/boqCal
 import { BOQItemDialog } from "@/components/boq/BOQItemDialog";
 import type { Project, BOQItem } from "@/types";
 import { BOQ_CATEGORIES } from "@/constants";
+import { exportBOQToExcel, printBOQ } from "@/lib/exportUtils";
 
 type SortField = "itemNo" | "description" | "category" | "quantity" | "materialCost" | "laborCost" | "total";
 type SortDirection = "asc" | "desc";
@@ -272,6 +273,25 @@ export default function BOQPage() {
     }
   }
 
+  const handleExport = () => {
+    if (!selectedProject || boqItems.length === 0) {
+      toast({ title: "No data to export", variant: "destructive" });
+      return;
+    }
+    const project = projects.find(p => p.id === selectedProject);
+    exportBOQToExcel(boqItems, project?.name || "Project");
+    toast({ title: "Exported to Excel successfully!" });
+  };
+
+  const handlePrint = () => {
+    if (!selectedProject || boqItems.length === 0) {
+      toast({ title: "No data to print", variant: "destructive" });
+      return;
+    }
+    const project = projects.find(p => p.id === selectedProject);
+    printBOQ(boqItems, project?.name || "Project");
+  };
+
   // Calculate summary
   const totalMaterialCost = filteredItems.reduce((sum, item) => sum + item.materialCost, 0);
   const totalLaborCost = filteredItems.reduce((sum, item) => sum + item.laborCost, 0);
@@ -305,14 +325,35 @@ export default function BOQPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={handleRefreshCosts}
-            disabled={!selectedProject || refreshing}
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
-            Refresh Costs
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExport}
+              disabled={!selectedProject || boqItems.length === 0}
+            >
+              <FileSpreadsheet className="w-4 h-4 mr-2" />
+              Export to Excel
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePrint}
+              disabled={!selectedProject || boqItems.length === 0}
+            >
+              <Printer className="w-4 h-4 mr-2" />
+              Print BOQ
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefreshCosts}
+              disabled={!selectedProject || refreshing}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
+              Refresh Costs
+            </Button>
+          </div>
           <Button
             onClick={() => {
               setEditingItem(null);

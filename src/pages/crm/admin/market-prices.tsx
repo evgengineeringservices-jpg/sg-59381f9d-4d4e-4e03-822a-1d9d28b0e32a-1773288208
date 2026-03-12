@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Edit, Trash2, Search, TrendingUp, TrendingDown, RefreshCw, Calendar } from "lucide-react";
+import { Plus, Edit, Trash2, Search, TrendingUp, TrendingDown, RefreshCw, Calendar, FileSpreadsheet } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +39,7 @@ import {
 import type { MarketPrice } from "@/types";
 import { BOQ_CATEGORIES, DPWH_UNITS } from "@/constants";
 import { format } from "date-fns";
+import { exportMarketPricesToExcel } from "@/lib/exportUtils";
 
 export default function MarketPricesPage() {
   const [prices, setPrices] = useState<MarketPrice[]>([]);
@@ -193,6 +194,15 @@ export default function MarketPricesPage() {
     }
   }
 
+  const handleExport = () => {
+    if (filteredPrices.length === 0) {
+      toast({ title: "No prices to export", variant: "destructive" });
+      return;
+    }
+    exportMarketPricesToExcel(filteredPrices);
+    toast({ title: "Market prices exported to Excel successfully!" });
+  };
+
   const significantChanges = priceChanges.filter(
     (c) => Math.abs(c.priceChangePercent) > 10
   );
@@ -220,10 +230,16 @@ export default function MarketPricesPage() {
               </Badge>
             )}
           </Button>
-          <Button onClick={() => openDialog()}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Price
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={handleExport}>
+              <FileSpreadsheet className="w-4 h-4 mr-2" />
+              Export to Excel
+            </Button>
+            <Button onClick={() => openDialog()}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Price
+            </Button>
+          </div>
         </div>
       </div>
 

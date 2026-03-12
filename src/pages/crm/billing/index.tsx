@@ -9,11 +9,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Receipt, Calendar, Edit, Trash2 } from "lucide-react";
+import { Plus, Receipt, Calendar, Edit, Trash2, FileSpreadsheet, Printer } from "lucide-react";
 import { getBillingItems, createBillingItem, updateBillingItem, deleteBillingItem, getProjects } from "@/services/crmService";
 import { BILLING_TYPES, BILLING_STATUSES, formatPeso, PH_VAT_RATE, PH_EWT_RATE, PH_RETENTION_RATE, calculateBilling } from "@/constants";
 import type { BillingItem, Project, BillingType, BillingStatus } from "@/types";
 import { format } from "date-fns";
+import { exportBillingToExcel, printElement } from "@/lib/exportUtils";
+import { toast } from "@/components/ui/use-toast";
 
 export default function BillingPage() {
   const [billingItems, setBillingItems] = useState<BillingItem[]>([]);
@@ -125,6 +127,24 @@ export default function BillingPage() {
       }
     }
   }
+
+  const handleExport = () => {
+    if (!selectedProject || billingItems.length === 0) {
+      toast({ title: "No billing items to export", variant: "destructive" });
+      return;
+    }
+    const project = projects.find(p => p.id === selectedProject);
+    exportBillingToExcel(billingItems, project?.name || "Project");
+    toast({ title: "Billing exported to Excel successfully!" });
+  };
+
+  const handlePrint = () => {
+    if (!selectedProject || billingItems.length === 0) {
+      toast({ title: "No billing items to print", variant: "destructive" });
+      return;
+    }
+    printElement("billing-list", "BILLING STATEMENT");
+  };
 
   const filteredItems = billingItems;
 
@@ -412,79 +432,105 @@ export default function BillingPage() {
               <CardDescription>BIR-compliant billing with automatic calculations</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Invoice No</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead className="text-right">Base Amount</TableHead>
-                      <TableHead className="text-right">VAT</TableHead>
-                      <TableHead className="text-right">Net</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredItems.map((item) => {
-                      const amounts = calculateBilling(item.baseAmount);
-                      const project = projects.find((p) => p.id === item.projectId);
-                      return (
-                        <TableRow key={item.id}>
-                          <TableCell className="font-medium">{item.invoiceNo}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-1 text-sm">
-                              <Calendar className="h-3 w-3" />
-                              {format(new Date(item.date), "MMM dd, yyyy")}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline">
-                              {BILLING_TYPES.find(t => t.value === item.billingType)?.label || item.billingType}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="max-w-xs truncate">
-                            {item.description || project?.name || "-"}
-                          </TableCell>
-                          <TableCell className="text-right font-medium">
-                            {formatPeso(item.baseAmount)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {formatPeso(amounts.vat)}
-                          </TableCell>
-                          <TableCell className="text-right font-medium text-green-600">
-                            {formatPeso(amounts.netAmount)}
-                          </TableCell>
-                          <TableCell>
-                            <Badge className={getStatusColor(item.status)}>
-                              {BILLING_STATUSES.find(s => s.value === item.status)?.label || item.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleOpenDialog(item)}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleDelete(item.id)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExport}
+                  disabled={!selectedProject || billingItems.length === 0}
+                >
+                  <FileSpreadsheet className="w-4 h-4 mr-2" />
+                  <span className="hidden sm:inline">Export</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePrint}
+                  disabled={!selectedProject || billingItems.length === 0}
+                >
+                  <Printer className="w-4 h-4 mr-2" />
+                  <span className="hidden sm:inline">Print</span>
+                </Button>
+                <Button onClick={() => setDialogOpen(true)} disabled={!selectedProject}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Billing Item
+                </Button>
+              </div>
+              <div id="billing-list">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Invoice No</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead className="text-right">Base Amount</TableHead>
+                        <TableHead className="text-right">VAT</TableHead>
+                        <TableHead className="text-right">Net</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredItems.map((item) => {
+                        const amounts = calculateBilling(item.baseAmount);
+                        const project = projects.find((p) => p.id === item.projectId);
+                        return (
+                          <TableRow key={item.id}>
+                            <TableCell className="font-medium">{item.invoiceNo}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1 text-sm">
+                                <Calendar className="h-3 w-3" />
+                                {format(new Date(item.date), "MMM dd, yyyy")}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">
+                                {BILLING_TYPES.find(t => t.value === item.billingType)?.label || item.billingType}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="max-w-xs truncate">
+                              {item.description || project?.name || "-"}
+                            </TableCell>
+                            <TableCell className="text-right font-medium">
+                              {formatPeso(item.baseAmount)}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {formatPeso(amounts.vat)}
+                            </TableCell>
+                            <TableCell className="text-right font-medium text-green-600">
+                              {formatPeso(amounts.netAmount)}
+                            </TableCell>
+                            <TableCell>
+                              <Badge className={getStatusColor(item.status)}>
+                                {BILLING_STATUSES.find(s => s.value === item.status)?.label || item.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleOpenDialog(item)}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleDelete(item.id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
             </CardContent>
           </Card>

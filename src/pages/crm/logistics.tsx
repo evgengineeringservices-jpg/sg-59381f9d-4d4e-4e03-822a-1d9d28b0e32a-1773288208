@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Truck, Calendar, DollarSign, Package, AlertTriangle, CheckCircle } from "lucide-react";
+import { Truck, Calendar, DollarSign, Package, AlertTriangle, CheckCircle, FileSpreadsheet } from "lucide-react";
 import { CRMLayout } from "@/components/layout/CRMLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -10,6 +10,10 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { getProjects } from "@/services/crmService";
 import { generateWeeklyMaterialsForecast } from "@/lib/projectAutomation";
 import type { Project } from "@/types";
+import { exportWeeklyLogisticsToExcel } from "@/lib/exportUtils";
+import { toast } from "@/components/ui/use-toast";
+import { cn } from "@/lib/utils";
+import { RefreshCw } from "lucide-react";
 
 interface WeeklyForecast {
   weekNumber: number;
@@ -72,6 +76,16 @@ export default function LogisticsPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleExport = () => {
+    if (!selectedProject || forecasts.length === 0) {
+      toast({ title: "No logistics data to export", variant: "destructive" });
+      return;
+    }
+    const project = projects.find(p => p.id === selectedProject);
+    exportWeeklyLogisticsToExcel(forecasts, project?.name || "Project");
+    toast({ title: "Weekly logistics exported to Excel successfully!" });
   };
 
   const formatCurrency = (value: number) => {
@@ -138,6 +152,25 @@ export default function LogisticsPage() {
               ))}
             </SelectContent>
           </Select>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExport}
+            disabled={!selectedProject || forecasts.length === 0}
+          >
+            <FileSpreadsheet className="w-4 h-4 mr-2" />
+            Export to Excel
+          </Button>
+          <Button
+            onClick={loadWeeklyForecasts}
+            disabled={!selectedProject || loading}
+          >
+            <RefreshCw className={cn("w-4 h-4 mr-2", loading && "animate-spin")} />
+            Generate Forecast
+          </Button>
         </div>
 
         {!selectedProject ? (
