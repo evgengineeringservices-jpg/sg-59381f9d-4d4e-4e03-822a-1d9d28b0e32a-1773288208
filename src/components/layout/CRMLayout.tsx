@@ -19,7 +19,7 @@ import {
   FolderKanban,
   Users,
   Calculator,
-  Gantt,
+  GanttChart,
   CheckSquare,
   ClipboardCheck,
   Truck,
@@ -57,7 +57,7 @@ const navigationGroups = [
     label: "Operations",
     items: [
       { label: "BOQ / Estimation", href: "/crm/boq", icon: Calculator },
-      { label: "Planning / Gantt", href: "/crm/planning", icon: Gantt },
+      { label: "Planning / Gantt", href: "/crm/planning", icon: GanttChart },
       { label: "Tasks", href: "/crm/tasks", icon: CheckSquare },
       { label: "Progress Reports", href: "/crm/reports", icon: ClipboardCheck },
       { label: "Weekly Logistics", href: "/crm/logistics", icon: Truck },

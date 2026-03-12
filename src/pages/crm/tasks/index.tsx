@@ -40,13 +40,13 @@ export default function TasksPage() {
     title: "",
     description: "",
     projectId: "",
-    phase: "",
+    phaseId: "",
     assignedTo: "",
     assignedRole: "",
     dueDate: "",
     priority: "medium" as TaskPriority,
     status: "todo" as TaskStatus,
-    source: "manual" as "manual" | "auto",
+    source: "manual" as "manual" | "auto_generated",
   });
 
   useEffect(() => {
@@ -84,12 +84,12 @@ export default function TasksPage() {
       setEditingTask(task);
       setFormData({
         title: task.title,
-        description: task.description,
-        projectId: task.projectId,
-        phase: task.phase || "",
+        description: task.description || "",
+        projectId: task.projectId || "",
+        phaseId: task.phaseId || "",
         assignedTo: task.assignedTo || "",
         assignedRole: task.assignedRole || "",
-        dueDate: task.dueDate,
+        dueDate: task.dueDate || "",
         priority: task.priority,
         status: task.status,
         source: task.source,
@@ -100,7 +100,7 @@ export default function TasksPage() {
         title: "",
         description: "",
         projectId: projects.length > 0 ? projects[0].id : "",
-        phase: "",
+        phaseId: "",
         assignedTo: "",
         assignedRole: "",
         dueDate: "",
@@ -115,9 +115,18 @@ export default function TasksPage() {
   async function handleSubmit() {
     try {
       if (editingTask) {
-        await updateTask(editingTask.id, formData as Partial<Task>);
+        await updateTask(editingTask.id, {
+          ...formData,
+          assignedRole: formData.assignedRole as any,
+        } as Partial<Task>);
       } else {
-        await createTask(formData as Omit<Task, "id" | "createdAt" | "updatedAt">);
+        await createTask({
+          ...formData,
+          assignedRole: formData.assignedRole as any,
+          estimatedCostImpact: null,
+          estimatedProfitImpact: null,
+          dependency: null,
+        } as Omit<Task, "id" | "createdAt" | "updatedAt">);
       }
       setDialogOpen(false);
       loadData();
@@ -238,12 +247,12 @@ export default function TasksPage() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="phase">Phase</Label>
+                    <Label htmlFor="phaseId">Phase ID</Label>
                     <Input
-                      id="phase"
-                      value={formData.phase}
-                      onChange={(e) => setFormData({ ...formData, phase: e.target.value })}
-                      placeholder="Mobilization"
+                      id="phaseId"
+                      value={formData.phaseId}
+                      onChange={(e) => setFormData({ ...formData, phaseId: e.target.value })}
+                      placeholder="Mobilization Phase ID"
                     />
                   </div>
                 </div>
@@ -378,10 +387,10 @@ export default function TasksPage() {
                             {project && (
                               <Badge variant="outline">{project.name}</Badge>
                             )}
-                            {task.phase && (
-                              <Badge variant="outline">{task.phase}</Badge>
+                            {task.phaseId && (
+                              <Badge variant="outline">Phase: {task.phaseId}</Badge>
                             )}
-                            {task.source === "auto" && (
+                            {task.source === "auto_generated" && (
                               <Badge variant="outline" className="border-accent text-accent">
                                 Auto-generated
                               </Badge>

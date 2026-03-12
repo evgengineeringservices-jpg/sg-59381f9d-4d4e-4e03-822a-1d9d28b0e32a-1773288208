@@ -213,6 +213,7 @@ export interface PlanningPhase {
   assignedUserId: string | null;
   isMilestone: boolean;
   isBillingTrigger: boolean;
+  notes?: string | null;
   createdAt: string;
   updatedAt: string;
 }

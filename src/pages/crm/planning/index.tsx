@@ -24,7 +24,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { getProjects, getPlanningPhases, createPlanningPhase, updatePlanningPhase, deletePlanningPhase } from "@/services/crmService";
 import { Plus, Edit2, Trash2, Calendar, TrendingUp } from "lucide-react";
-import type { Project, PlanningPhase, PhaseStatus } from "@/types";
+import type { Project, PlanningPhase } from "@/types";
 
 export default function PlanningPage() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -39,12 +39,12 @@ export default function PlanningPage() {
     name: "",
     startDate: "",
     endDate: "",
-    status: "not_started" as PhaseStatus,
+    status: "not_started" as "not_started" | "in_progress" | "completed" | "delayed",
     progress: 0,
     dependencies: "",
     assignedRole: "",
     isMilestone: false,
-    billingTrigger: false,
+    isBillingTrigger: false,
     notes: "",
   });
 
@@ -90,10 +90,10 @@ export default function PlanningPage() {
         endDate: phase.endDate,
         status: phase.status,
         progress: phase.progress,
-        dependencies: phase.dependencies || "",
+        dependencies: phase.dependencies?.join(", ") || "",
         assignedRole: phase.assignedRole || "",
         isMilestone: phase.isMilestone || false,
-        billingTrigger: phase.billingTrigger || false,
+        isBillingTrigger: phase.isBillingTrigger || false,
         notes: phase.notes || "",
       });
     } else {
@@ -107,7 +107,7 @@ export default function PlanningPage() {
         dependencies: "",
         assignedRole: "",
         isMilestone: false,
-        billingTrigger: false,
+        isBillingTrigger: false,
         notes: "",
       });
     }
@@ -116,12 +116,19 @@ export default function PlanningPage() {
 
   async function handleSubmit() {
     try {
+      const phaseData = {
+        ...formData,
+        dependencies: formData.dependencies ? formData.dependencies.split(",").map(d => d.trim()).filter(Boolean) : [],
+        assignedRole: formData.assignedRole as any,
+      };
+
       if (editingPhase) {
-        await updatePlanningPhase(editingPhase.id, formData as Partial<PlanningPhase>);
+        await updatePlanningPhase(editingPhase.id, phaseData as Partial<PlanningPhase>);
       } else {
         await createPlanningPhase({
-          ...formData,
+          ...phaseData,
           projectId: selectedProjectId,
+          assignedUserId: null,
         } as Omit<PlanningPhase, "id" | "createdAt" | "updatedAt">);
       }
       setDialogOpen(false);
@@ -141,7 +148,7 @@ export default function PlanningPage() {
     }
   }
 
-  const getStatusColor = (status: PhaseStatus) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
       case "not_started": return "bg-gray-100 text-gray-700";
       case "in_progress": return "bg-blue-100 text-blue-700";
@@ -237,7 +244,7 @@ export default function PlanningPage() {
                       <Label htmlFor="status">Status *</Label>
                       <Select
                         value={formData.status}
-                        onValueChange={(value) => setFormData({ ...formData, status: value as PhaseStatus })}
+                        onValueChange={(value) => setFormData({ ...formData, status: value as any })}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -298,12 +305,12 @@ export default function PlanningPage() {
                     <div className="flex items-center gap-2">
                       <input
                         type="checkbox"
-                        id="billingTrigger"
-                        checked={formData.billingTrigger}
-                        onChange={(e) => setFormData({ ...formData, billingTrigger: e.target.checked })}
+                        id="isBillingTrigger"
+                        checked={formData.isBillingTrigger}
+                        onChange={(e) => setFormData({ ...formData, isBillingTrigger: e.target.checked })}
                         className="w-4 h-4"
                       />
-                      <Label htmlFor="billingTrigger">Billing Trigger</Label>
+                      <Label htmlFor="isBillingTrigger">Billing Trigger</Label>
                     </div>
                   </div>
 
@@ -373,7 +380,7 @@ export default function PlanningPage() {
                             Milestone
                           </Badge>
                         )}
-                        {phase.billingTrigger && (
+                        {phase.isBillingTrigger && (
                           <Badge variant="outline" className="border-green-500 text-green-700">
                             Billing
                           </Badge>

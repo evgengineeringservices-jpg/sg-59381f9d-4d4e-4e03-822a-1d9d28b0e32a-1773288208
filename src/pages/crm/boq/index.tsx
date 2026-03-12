@@ -23,9 +23,9 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { getProjects, getBOQItems, createBOQItem, updateBOQItem, deleteBOQItem } from "@/services/crmService";
-import { formatPeso, DPWH_CATEGORIES, DPWH_UNITS } from "@/constants";
+import { formatPeso, BOQ_CATEGORIES, DPWH_UNITS } from "@/constants";
 import { Plus, Edit2, Trash2, Calculator, TrendingUp, Package, Wrench } from "lucide-react";
-import type { Project, BOQItem, DPWHCategory, DPWHUnit } from "@/types";
+import type { Project, BOQItem, BOQCategory, DPWHUnit } from "@/types";
 
 export default function BOQPage() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -39,7 +39,7 @@ export default function BOQPage() {
     itemNo: "",
     dpwhItemCode: "",
     description: "",
-    category: "concrete_works" as DPWHCategory,
+    category: "concrete" as BOQCategory,
     unit: "cu.m" as DPWHUnit,
     quantity: 0,
     unitCost: 0,
@@ -102,7 +102,7 @@ export default function BOQPage() {
         itemNo: "",
         dpwhItemCode: "",
         description: "",
-        category: "concrete_works",
+        category: "concrete",
         unit: "cu.m",
         quantity: 0,
         unitCost: 0,
@@ -147,7 +147,7 @@ export default function BOQPage() {
     }
     acc[item.category].push(item);
     return acc;
-  }, {} as Record<DPWHCategory, BOQItem[]>);
+  }, {} as Record<BOQCategory, BOQItem[]>);
 
   const totalMaterial = boqItems.reduce((sum, item) => sum + item.materialCost * item.quantity, 0);
   const totalLabor = boqItems.reduce((sum, item) => sum + item.laborCost * item.quantity, 0);
@@ -225,13 +225,13 @@ export default function BOQPage() {
                     <Label htmlFor="category">Category *</Label>
                     <Select
                       value={formData.category}
-                      onValueChange={(value) => setFormData({ ...formData, category: value as DPWHCategory })}
+                      onValueChange={(value) => setFormData({ ...formData, category: value as BOQCategory })}
                     >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {DPWH_CATEGORIES.map((cat) => (
+                        {BOQ_CATEGORIES.map((cat) => (
                           <SelectItem key={cat.value} value={cat.value}>
                             {cat.label}
                           </SelectItem>
@@ -416,7 +416,7 @@ export default function BOQPage() {
               <Card key={category} className="shadow-card">
                 <CardHeader>
                   <CardTitle className="text-lg">
-                    {DPWH_CATEGORIES.find(c => c.value === category)?.label}
+                    {BOQ_CATEGORIES.find(c => c.value === category)?.label || category}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
