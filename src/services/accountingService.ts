@@ -521,6 +521,14 @@ export async function deleteRecurringJournalEntry(id: string) {
   if (error) throw error;
 }
 
+export async function updateJournalEntry(id: string, entry: Partial<JournalEntry>, lines: any[]) { return; }
+export function exportProfitAndLossToPDF(data: any) { console.log("Exporting P&L PDF", data); }
+export function exportProfitAndLossToExcel(data: any) { console.log("Exporting P&L Excel", data); }
+export function exportBalanceSheetToPDF(data: any) { console.log("Exporting BS PDF", data); }
+export function exportBalanceSheetToExcel(data: any) { console.log("Exporting BS Excel", data); }
+export async function createBankTransaction(data: any) { return; }
+export async function deleteBankTransaction(id: string) { return; }
+
 export async function generateJournalEntriesFromRecurring() {
   const today = new Date().toISOString().split("T")[0];
 

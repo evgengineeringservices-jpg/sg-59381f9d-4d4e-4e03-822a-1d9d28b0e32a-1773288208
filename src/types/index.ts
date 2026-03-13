@@ -125,7 +125,7 @@ export type DPWHUnit =
 
 export type PlanningPhaseStatus = "not-started" | "in-progress" | "completed" | "delayed";
 
-export type AccountType = "asset" | "liability" | "equity" | "revenue" | "expense";
+export type AccountType = "asset" | "liability" | "equity" | "revenue" | "expense" | "cogs";
 
 export interface Account {
   id: string;
@@ -134,6 +134,8 @@ export interface Account {
   type: AccountType;
   category: string;
   description: string | null;
+  balance: number;
+  isActive?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -141,6 +143,7 @@ export interface Account {
 export interface JournalEntry {
   id: string;
   projectId?: string;
+  project?: { name: string };
   date: string;
   referenceNo: string;
   description: string;
@@ -161,9 +164,20 @@ export interface JournalLine {
   account?: Account;
 }
 
+export interface RecurringJournalLine {
+  id: string;
+  recurringEntryId: string;
+  accountId: string;
+  description?: string;
+  debit: number;
+  credit: number;
+  account?: Account;
+}
+
 export interface RecurringJournalEntry {
   id: string;
   projectId?: string;
+  project?: { name: string };
   description: string;
   frequency: "daily" | "weekly" | "monthly" | "quarterly" | "yearly";
   startDate: string;
@@ -173,16 +187,6 @@ export interface RecurringJournalEntry {
   createdAt: string;
   createdBy?: string;
   lines?: RecurringJournalLine[];
-}
-
-export interface RecurringJournalLine {
-  id: string;
-  recurringEntryId: string;
-  accountId: string;
-  description?: string;
-  debit: number;
-  credit: number;
-  account?: Account;
 }
 
 export interface BankReconciliation {

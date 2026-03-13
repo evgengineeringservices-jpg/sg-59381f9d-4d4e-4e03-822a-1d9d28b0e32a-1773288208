@@ -5,44 +5,39 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import type {
-  Account,
-  JournalEntry,
-  JournalLine,
-  RecurringJournalEntry,
-  RecurringJournalLine,
-  BankReconciliation,
-  BankTransaction,
-  FinancialPeriod,
-  Project,
-} from "@/types";
+import { Plus, Download, FileText, Trash2, CheckCircle, XCircle, Clock, Filter, Calendar, Search, TrendingUp, TrendingDown } from "lucide-react";
 import {
   getAccounts,
   getJournalEntries,
   createJournalEntry,
+  updateJournalEntry,
   postJournalEntry,
   getAccountsReceivableAging,
   getAccountsPayableAging,
+  exportProfitAndLossToPDF,
+  exportProfitAndLossToExcel,
+  exportBalanceSheetToPDF,
+  exportBalanceSheetToExcel,
   getRecurringJournalEntries,
   createRecurringJournalEntry,
   updateRecurringJournalEntry,
-  deleteRecurringJournalEntry,
   generateJournalEntriesFromRecurring,
   getBankReconciliations,
   createBankReconciliation,
   updateBankReconciliation,
+  createBankTransaction,
   updateBankTransaction,
+  deleteBankTransaction,
   getFinancialStatementComparison,
 } from "@/services/accountingService";
 import { getProjects } from "@/services/crmService";
-import { Plus, RefreshCw, Trash2, Save, X, FileText, FileSpreadsheet, CheckCircle2 } from "lucide-react";
-import { format } from "date-fns";
+import type { Account, JournalEntry, JournalLine, RecurringJournalEntry, BankReconciliation, BankTransaction } from "@/types";
 import {
   LineChart,
   Line,
@@ -63,32 +58,27 @@ export default function AccountingPage() {
   const [loading, setLoading] = useState(true);
   
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [entries, setEntries] = useState<JournalEntry[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
   
-  const [dialogOpen, setDialogOpen] = useState(false);
-
-  // New Journal Entry State
+  const [journalDialogOpen, setJournalDialogOpen] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<JournalEntry | null>(null);
   const [newEntry, setNewEntry] = useState({
-    date: new Date().toISOString().split("T")[0],
-    referenceNo: "",
     description: "",
-    projectId: "none",
+    date: new Date().toISOString().split("T")[0],
+    projectId: "",
   });
-  const [newLines, setNewLines] = useState([
-    { accountId: "", description: "", debit: 0, credit: 0 },
+  const [journalLines, setJournalLines] = useState<any[]>([
     { accountId: "", description: "", debit: 0, credit: 0 },
   ]);
-
-  const [balanceSheet, setBalanceSheet] = useState<any>(null);
+  
   const [arAging, setArAging] = useState<any>(null);
   const [apAging, setApAging] = useState<any>(null);
 
-  // Recurring entries state
   const [recurringEntries, setRecurringEntries] = useState<RecurringJournalEntry[]>([]);
   const [recurringDialogOpen, setRecurringDialogOpen] = useState(false);
   const [editingRecurring, setEditingRecurring] = useState<RecurringJournalEntry | null>(null);
-  const [recurringFormData, setRecurringFormData] = useState({
+  const [newRecurring, setNewRecurring] = useState({
     description: "",
     frequency: "monthly" as "daily" | "weekly" | "monthly" | "quarterly" | "yearly",
     startDate: new Date().toISOString().split("T")[0],
@@ -96,177 +86,328 @@ export default function AccountingPage() {
     projectId: "",
     isActive: true,
   });
-  const [recurringLines, setRecurringLines] = useState<Omit<RecurringJournalLine, "id" | "recurringEntryId">[]>([]);
+  const [recurringLines, setRecurringLines] = useState<any[]>([
+    { accountId: "", description: "", debit: 0, credit: 0 },
+  ]);
 
-  // Bank reconciliation state
+  const [recurringSearchQuery, setRecurringSearchQuery] = useState("");
+  const [recurringFrequencyFilter, setRecurringFrequencyFilter] = useState("all");
+  const [recurringStatusFilter, setRecurringStatusFilter] = useState("all");
+  const [recurringPage, setRecurringPage] = useState(1);
+  const [recurringPerPage, setRecurringPerPage] = useState(10);
+
   const [reconciliations, setReconciliations] = useState<BankReconciliation[]>([]);
   const [reconciliationDialogOpen, setReconciliationDialogOpen] = useState(false);
   const [editingReconciliation, setEditingReconciliation] = useState<BankReconciliation | null>(null);
-  const [reconciliationFormData, setReconciliationFormData] = useState({
+  const [newReconciliation, setNewReconciliation] = useState({
     accountId: "",
     statementDate: new Date().toISOString().split("T")[0],
     statementBalance: 0,
     bookBalance: 0,
-    reconciledBalance: 0,
-    status: "in_progress" as BankReconciliation["status"],
+    status: "in_progress" as "in_progress" | "completed" | "reviewed",
   });
-  const [bankTransactions, setBankTransactions] = useState<Omit<BankTransaction, "id" | "reconciliationId" | "createdAt">[]>([]);
+  const [bankTransactions, setBankTransactions] = useState<any[]>([]);
 
-  // Period comparison state
-  const [comparisonPeriods, setComparisonPeriods] = useState<FinancialPeriod[]>([
-    {
-      startDate: new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0],
-      endDate: new Date(new Date().getFullYear(), 11, 31).toISOString().split("T")[0],
-      label: "Current Year",
-    },
-    {
-      startDate: new Date(new Date().getFullYear() - 1, 0, 1).toISOString().split("T")[0],
-      endDate: new Date(new Date().getFullYear() - 1, 11, 31).toISOString().split("T")[0],
-      label: "Previous Year",
-    },
+  const [reconAccountFilter, setReconAccountFilter] = useState("all");
+  const [reconStatusFilter, setReconStatusFilter] = useState("all");
+  const [reconDateFrom, setReconDateFrom] = useState("");
+  const [reconDateTo, setReconDateTo] = useState("");
+  const [reconPage, setReconPage] = useState(1);
+  const [reconPerPage, setReconPerPage] = useState(10);
+
+  const [comparisonPeriods, setComparisonPeriods] = useState<{ startDate: string; endDate: string; label: string }[]>([
+    { startDate: new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0], endDate: new Date().toISOString().split("T")[0], label: "Current Year" },
+    { startDate: new Date(new Date().getFullYear() - 1, 0, 1).toISOString().split("T")[0], endDate: new Date(new Date().getFullYear() - 1, 11, 31).toISOString().split("T")[0], label: "Previous Year" },
   ]);
   const [comparisonData, setComparisonData] = useState<any>(null);
-
-  // Filters and Pagination
-  const [recurringFilters, setRecurringFilters] = useState({
-    search: "",
-    frequency: "all",
-    status: "all",
-  });
-  const [recurringPage, setRecurringPage] = useState(1);
-  const [recurringPerPage] = useState(10);
-
-  const [reconciliationFilters, setReconciliationFilters] = useState({
-    accountId: "all",
-    status: "all",
-    dateFrom: "",
-    dateTo: "",
-  });
-  const [reconciliationPage, setReconciliationPage] = useState(1);
-  const [reconciliationPerPage] = useState(10);
-
-  // Chart data for comparisons
   const [comparisonCharts, setComparisonCharts] = useState<any>(null);
 
-  // Filter and paginate recurring entries
+  useEffect(() => {
+    if (!authLoading && user) {
+      loadData();
+    }
+  }, [authLoading, user]);
+
+  async function loadData() {
+    try {
+      setLoading(true);
+      const [accs, jEs, projs] = await Promise.all([
+        getAccounts(),
+        getJournalEntries(),
+        getProjects(),
+      ]);
+      setAccounts(accs);
+      setJournalEntries(jEs);
+      setProjects(projs);
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(amount);
+  };
+
+  const totalDebit = journalLines.reduce((sum, line) => sum + (line.debit || 0), 0);
+  const totalCredit = journalLines.reduce((sum, line) => sum + (line.credit || 0), 0);
+  const isBalanced = Math.abs(totalDebit - totalCredit) < 0.01;
+
+  async function handleSaveEntry() {
+    try {
+      if (!isBalanced) {
+        toast({ variant: "destructive", title: "Error", description: "Journal entry must be balanced (total debit = total credit)" });
+        return;
+      }
+
+      const entryData = {
+        description: newEntry.description,
+        date: newEntry.date,
+        projectId: newEntry.projectId || undefined,
+        status: "draft" as const,
+      };
+
+      if (editingEntry) {
+        await updateJournalEntry(editingEntry.id, entryData, journalLines);
+        toast({ title: "Success", description: "Journal entry updated successfully" });
+      } else {
+        await createJournalEntry(entryData, journalLines);
+        toast({ title: "Success", description: "Journal entry created successfully" });
+      }
+
+      setJournalDialogOpen(false);
+      setEditingEntry(null);
+      setNewEntry({ description: "", date: new Date().toISOString().split("T")[0], projectId: "" });
+      setJournalLines([{ accountId: "", description: "", debit: 0, credit: 0 }]);
+      loadData();
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    }
+  }
+
+  async function handlePostEntry(entryId: string) {
+    try {
+      await postJournalEntry(entryId);
+      toast({ title: "Success", description: "Journal entry posted successfully" });
+      loadData();
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    }
+  }
+
+  function handleAddLine() {
+    setJournalLines([...journalLines, { accountId: "", description: "", debit: 0, credit: 0 }]);
+  }
+
+  function handleRemoveLine(index: number) {
+    setJournalLines(journalLines.filter((_, i) => i !== index));
+  }
+
+  function handleLineChange(index: number, field: keyof JournalLine, value: any) {
+    const updated = [...journalLines];
+    (updated[index] as any)[field] = value;
+    setJournalLines(updated);
+  }
+
+  async function loadARAgingReport() {
+    try {
+      const data = await getAccountsReceivableAging();
+      setArAging(data);
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    }
+  }
+
+  async function loadAPAgingReport() {
+    try {
+      const data = await getAccountsPayableAging();
+      setApAging(data);
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    }
+  }
+
+  const statements = useMemo(() => {
+    const revenue = accounts.filter(a => a.type === "revenue");
+    const cogs = accounts.filter(a => a.type === "cogs");
+    const expenses = accounts.filter(a => a.type === "expense");
+    const assets = accounts.filter(a => a.type === "asset");
+    const liabilities = accounts.filter(a => a.type === "liability");
+    const equity = accounts.filter(a => a.type === "equity");
+
+    const totalRevenue = revenue.reduce((sum, a) => sum + a.balance, 0);
+    const totalCOGS = cogs.reduce((sum, a) => sum + a.balance, 0);
+    const totalExpenses = expenses.reduce((sum, a) => sum + a.balance, 0);
+    const grossProfit = totalRevenue - totalCOGS;
+    const netIncome = grossProfit - totalExpenses;
+
+    const totalAssets = assets.reduce((sum, a) => sum + a.balance, 0);
+    const totalLiabilities = liabilities.reduce((sum, a) => sum + a.balance, 0);
+    const totalEquity = equity.reduce((sum, a) => sum + a.balance, 0) + netIncome;
+
+    return {
+      profitAndLoss: { revenue, cogs, expenses, totalRevenue, totalCOGS, totalExpenses, grossProfit, netIncome },
+      balanceSheet: { assets, liabilities, equity, totalAssets, totalLiabilities, totalEquity },
+    };
+  }, [accounts]);
+
+  async function loadRecurringEntries() {
+    try {
+      const data = await getRecurringJournalEntries();
+      setRecurringEntries(data);
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    }
+  }
+
+  async function handleSaveRecurring() {
+    try {
+      const recurringData: any = {
+        description: newRecurring.description,
+        frequency: newRecurring.frequency,
+        startDate: newRecurring.startDate,
+        endDate: newRecurring.endDate || undefined,
+        projectId: newRecurring.projectId || undefined,
+        isActive: newRecurring.isActive,
+        nextOccurrence: newRecurring.startDate,
+      };
+
+      if (editingRecurring) {
+        await updateRecurringJournalEntry(editingRecurring.id, recurringData, recurringLines);
+        toast({ title: "Success", description: "Recurring entry updated successfully" });
+      } else {
+        await createRecurringJournalEntry(recurringData, recurringLines);
+        toast({ title: "Success", description: "Recurring entry created successfully" });
+      }
+
+      setRecurringDialogOpen(false);
+      setEditingRecurring(null);
+      setNewRecurring({ description: "", frequency: "monthly", startDate: new Date().toISOString().split("T")[0], endDate: "", projectId: "", isActive: true });
+      setRecurringLines([{ accountId: "", description: "", debit: 0, credit: 0 }]);
+      loadRecurringEntries();
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    }
+  }
+
+  async function handleGenerateRecurringEntries() {
+    try {
+      const generated = await generateJournalEntriesFromRecurring();
+      toast({ title: "Success", description: `Generated ${generated.length} journal entries from recurring templates` });
+      loadData();
+      loadRecurringEntries();
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    }
+  }
+
   const filteredRecurringEntries = useMemo(() => {
-    if (!recurringEntries) return [];
-
-    const filtered = recurringEntries.filter((entry) => {
-      // Search filter
-      if (
-        recurringFilters.search &&
-        !entry.description.toLowerCase().includes(recurringFilters.search.toLowerCase())
-      ) {
-        return false;
-      }
-
-      // Frequency filter
-      if (recurringFilters.frequency !== "all" && entry.frequency !== recurringFilters.frequency) {
-        return false;
-      }
-
-      // Status filter
-      if (recurringFilters.status !== "all") {
-        const isActive = entry.isActive;
-        if (recurringFilters.status === "active" && !isActive) return false;
-        if (recurringFilters.status === "inactive" && isActive) return false;
-      }
-
-      return true;
+    return recurringEntries.filter(entry => {
+      const matchesSearch = entry.description.toLowerCase().includes(recurringSearchQuery.toLowerCase());
+      const matchesFrequency = recurringFrequencyFilter === "all" || entry.frequency === recurringFrequencyFilter;
+      const matchesStatus = recurringStatusFilter === "all" || (recurringStatusFilter === "active" ? entry.isActive : !entry.isActive);
+      return matchesSearch && matchesFrequency && matchesStatus;
     });
-
-    return filtered;
-  }, [recurringEntries, recurringFilters]);
+  }, [recurringEntries, recurringSearchQuery, recurringFrequencyFilter, recurringStatusFilter]);
 
   const paginatedRecurringEntries = useMemo(() => {
-    const start = (recurringPage - 1) * recurringPerPage;
-    const end = start + recurringPerPage;
-    return filteredRecurringEntries.slice(start, end);
+    const startIndex = (recurringPage - 1) * recurringPerPage;
+    return filteredRecurringEntries.slice(startIndex, startIndex + recurringPerPage);
   }, [filteredRecurringEntries, recurringPage, recurringPerPage]);
 
-  const totalRecurringPages = Math.ceil(filteredRecurringEntries.length / recurringPerPage);
+  const recurringTotalPages = Math.ceil(filteredRecurringEntries.length / recurringPerPage);
 
-  // Filter and paginate bank reconciliations
+  async function loadBankReconciliations() {
+    try {
+      const data = await getBankReconciliations();
+      setReconciliations(data);
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    }
+  }
+
+  async function handleSaveReconciliation() {
+    try {
+      const reconciliationData = {
+        accountId: newReconciliation.accountId,
+        statementDate: newReconciliation.statementDate,
+        statementBalance: newReconciliation.statementBalance,
+        bookBalance: newReconciliation.bookBalance,
+        status: newReconciliation.status,
+      };
+
+      if (editingReconciliation) {
+        await updateBankReconciliation(editingReconciliation.id, reconciliationData, bankTransactions);
+        toast({ title: "Success", description: "Bank reconciliation updated successfully" });
+      } else {
+        await createBankReconciliation(reconciliationData, bankTransactions);
+        toast({ title: "Success", description: "Bank reconciliation created successfully" });
+      }
+
+      setReconciliationDialogOpen(false);
+      setEditingReconciliation(null);
+      setNewReconciliation({ accountId: "", statementDate: new Date().toISOString().split("T")[0], statementBalance: 0, bookBalance: 0, status: "in_progress" });
+      setBankTransactions([]);
+      loadBankReconciliations();
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    }
+  }
+
   const filteredReconciliations = useMemo(() => {
-    if (!reconciliations) return [];
-
-    const filtered = reconciliations.filter((rec) => {
-      // Account filter
-      if (reconciliationFilters.accountId !== "all" && rec.accountId !== reconciliationFilters.accountId) {
-        return false;
-      }
-
-      // Status filter
-      if (reconciliationFilters.status !== "all" && rec.status !== reconciliationFilters.status) {
-        return false;
-      }
-
-      // Date range filter
-      if (reconciliationFilters.dateFrom && rec.statementDate < reconciliationFilters.dateFrom) {
-        return false;
-      }
-      if (reconciliationFilters.dateTo && rec.statementDate > reconciliationFilters.dateTo) {
-        return false;
-      }
-
-      return true;
+    return reconciliations.filter(recon => {
+      const matchesAccount = reconAccountFilter === "all" || recon.accountId === reconAccountFilter;
+      const matchesStatus = reconStatusFilter === "all" || recon.status === reconStatusFilter;
+      const matchesDateFrom = !reconDateFrom || recon.statementDate >= reconDateFrom;
+      const matchesDateTo = !reconDateTo || recon.statementDate <= reconDateTo;
+      return matchesAccount && matchesStatus && matchesDateFrom && matchesDateTo;
     });
-
-    return filtered;
-  }, [reconciliations, reconciliationFilters]);
+  }, [reconciliations, reconAccountFilter, reconStatusFilter, reconDateFrom, reconDateTo]);
 
   const paginatedReconciliations = useMemo(() => {
-    const start = (reconciliationPage - 1) * reconciliationPerPage;
-    const end = start + reconciliationPerPage;
-    return filteredReconciliations.slice(start, end);
-  }, [filteredReconciliations, reconciliationPage, reconciliationPerPage]);
+    const startIndex = (reconPage - 1) * reconPerPage;
+    return filteredReconciliations.slice(startIndex, startIndex + reconPerPage);
+  }, [filteredReconciliations, reconPage, reconPerPage]);
 
-  const totalReconciliationPages = Math.ceil(filteredReconciliations.length / reconciliationPerPage);
+  const reconTotalPages = Math.ceil(filteredReconciliations.length / reconPerPage);
 
-  // Generate chart data from comparison
+  async function loadPeriodComparison() {
+    try {
+      const data = await getFinancialStatementComparison(comparisonPeriods);
+      setComparisonData(data);
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    }
+  }
+
   useEffect(() => {
     if (!comparisonData) return;
 
-    const charts = {
-      revenueComparison: [],
-      expenseComparison: [],
-      profitMarginTrend: [],
-      assetGrowth: [],
-    };
-
-    // Extract data for charts
     const periods = Object.keys(comparisonData.profitAndLoss);
-    
-    periods.forEach((period) => {
-      const pl = comparisonData.profitAndLoss[period];
-      const bs = comparisonData.balanceSheet[period];
+    const revenueData = periods.map(period => ({
+      period,
+      revenue: comparisonData.profitAndLoss[period].totalRevenue,
+      cogs: comparisonData.profitAndLoss[period].totalCOGS,
+      expenses: comparisonData.profitAndLoss[period].totalExpenses,
+    }));
 
-      charts.revenueComparison.push({
-        period,
-        revenue: pl.totalRevenue,
-        cogs: pl.totalCOGS,
-        expenses: pl.totalExpenses,
-      });
+    const marginData = periods.map(period => ({
+      period,
+      grossMargin: ((comparisonData.profitAndLoss[period].grossProfit / comparisonData.profitAndLoss[period].totalRevenue) * 100).toFixed(1),
+      netMargin: ((comparisonData.profitAndLoss[period].netIncome / comparisonData.profitAndLoss[period].totalRevenue) * 100).toFixed(1),
+    }));
 
-      charts.profitMarginTrend.push({
-        period,
-        grossMargin: pl.grossMargin,
-        netMargin: pl.netMargin,
-      });
+    const assetData = periods.map(period => ({
+      period,
+      currentAssets: comparisonData.balanceSheet[period].totalAssets * 0.6,
+      nonCurrentAssets: comparisonData.balanceSheet[period].totalAssets * 0.4,
+    }));
 
-      charts.assetGrowth.push({
-        period,
-        currentAssets: bs.totalCurrentAssets,
-        nonCurrentAssets: bs.totalNonCurrentAssets,
-        totalAssets: bs.totalAssets,
-      });
-    });
-
+    const charts = { revenueData, marginData, assetData };
     setComparisonCharts(charts);
   }, [comparisonData]);
 
-  // Show loading only if still checking auth or loading initial data
   if (authLoading) {
     return (
       <CRMLayout>
@@ -277,7 +418,6 @@ export default function AccountingPage() {
     );
   }
 
-  // If not authenticated, CRMLayout will handle redirect
   if (!user) {
     return null;
   }
@@ -296,681 +436,569 @@ export default function AccountingPage() {
     <CRMLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="font-heading text-3xl md:text-4xl mb-2 tracking-wide">ACCOUNTING</h1>
-          <p className="text-muted-foreground">Manage journal entries and financial statements</p>
+          <h1 className="text-3xl font-bold">Accounting</h1>
+          <p className="text-muted-foreground">Manage your financial records and reports</p>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-8">
             <TabsTrigger value="journal">Journal Entries</TabsTrigger>
-            <TabsTrigger value="chart-of-accounts">Chart of Accounts</TabsTrigger>
-            <TabsTrigger value="financial-statements">Financial Statements</TabsTrigger>
+            <TabsTrigger value="accounts">Chart of Accounts</TabsTrigger>
+            <TabsTrigger value="statements">Financial Statements</TabsTrigger>
             <TabsTrigger value="ar-aging">AR Aging</TabsTrigger>
             <TabsTrigger value="ap-aging">AP Aging</TabsTrigger>
-            <TabsTrigger value="recurring-entries">Recurring Entries</TabsTrigger>
-            <TabsTrigger value="bank-reconciliation">Bank Reconciliation</TabsTrigger>
+            <TabsTrigger value="recurring">Recurring Entries</TabsTrigger>
+            <TabsTrigger value="reconciliation">Bank Reconciliation</TabsTrigger>
             <TabsTrigger value="period-comparison">Period Comparison</TabsTrigger>
           </TabsList>
 
-          {/* JOURNAL ENTRIES TAB */}
-          <TabsContent value="journal" className="space-y-4">
-            <div className="flex justify-between items-center">
-              <h2 className="text-xl font-semibold">Recent Entries</h2>
-              
-              <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button><Plus className="w-4 h-4 mr-2" /> New Journal Entry</Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-4xl">
-                  <DialogHeader>
-                    <DialogTitle>Create Journal Entry</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div className="space-y-2">
-                        <Label>Date</Label>
-                        <Input type="date" value={newEntry.date} onChange={e => setNewEntry({ ...newEntry, date: e.target.value })} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Reference No</Label>
-                        <Input placeholder="Auto-generated if blank" value={newEntry.referenceNo} onChange={e => setNewEntry({ ...newEntry, referenceNo: e.target.value })} />
-                      </div>
-                      <div className="space-y-2 col-span-2">
-                        <Label>Project (Optional)</Label>
-                        <Select value={newEntry.projectId} onValueChange={v => setNewEntry({ ...newEntry, projectId: v })}>
-                          <SelectTrigger><SelectValue placeholder="Select Project" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">No Project</SelectItem>
-                            {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2 col-span-4">
-                        <Label>Description</Label>
-                        <Input placeholder="Entry description" value={newEntry.description} onChange={e => setNewEntry({ ...newEntry, description: e.target.value })} />
-                      </div>
-                    </div>
-
-                    <div className="border rounded-md mt-4">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Account</TableHead>
-                            <TableHead>Description</TableHead>
-                            <TableHead className="w-32 text-right">Debit</TableHead>
-                            <TableHead className="w-32 text-right">Credit</TableHead>
-                            <TableHead className="w-12"></TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {newLines.map((line, i) => (
-                            <TableRow key={i}>
-                              <TableCell>
-                                <Select value={line.accountId} onValueChange={v => handleLineChange(i, 'accountId', v)}>
-                                  <SelectTrigger className="w-[200px]"><SelectValue placeholder="Select Account" /></SelectTrigger>
-                                  <SelectContent>
-                                    {accounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.code} - {acc.name}</SelectItem>)}
-                                  </SelectContent>
-                                </Select>
-                              </TableCell>
-                              <TableCell><Input placeholder="Line desc..." value={line.description} onChange={e => handleLineChange(i, 'description', e.target.value)} /></TableCell>
-                              <TableCell><Input type="number" className="text-right" value={line.debit || ''} onChange={e => handleLineChange(i, 'debit', e.target.value)} /></TableCell>
-                              <TableCell><Input type="number" className="text-right" value={line.credit || ''} onChange={e => handleLineChange(i, 'credit', e.target.value)} /></TableCell>
-                              <TableCell>
-                                {newLines.length > 2 && (
-                                  <Button variant="ghost" size="sm" onClick={() => handleRemoveLine(i)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
-                                )}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                    
-                    <div className="flex justify-between items-center pt-2">
-                      <Button variant="outline" onClick={handleAddLine}><Plus className="w-4 h-4 mr-2" /> Add Line</Button>
-                      <div className="flex gap-8 font-semibold">
-                        <div className={totalDebit !== totalCredit ? "text-destructive" : ""}>Total Debit: {formatCurrency(totalDebit)}</div>
-                        <div className={totalDebit !== totalCredit ? "text-destructive" : ""}>Total Credit: {formatCurrency(totalCredit)}</div>
-                      </div>
-                    </div>
-                    
-                    <div className="flex justify-end gap-2 pt-4">
-                      <Button variant="outline" onClick={() => handleSaveEntry(false)} disabled={!isBalanced}>Save as Draft</Button>
-                      <Button onClick={() => handleSaveEntry(true)} disabled={!isBalanced}>Post Entry</Button>
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </div>
-
-            <Card>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Reference</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {entries.length === 0 ? (
-                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No journal entries found</TableCell></TableRow>
-                  ) : entries.map((entry) => {
-                    const amount = entry.lines?.reduce((sum, line) => sum + line.debit, 0) || 0;
-                    return (
-                      <TableRow key={entry.id}>
-                        <TableCell>{format(new Date(entry.date), "MMM d, yyyy")}</TableCell>
-                        <TableCell className="font-mono text-sm">{entry.referenceNo}</TableCell>
-                        <TableCell>
-                          <div>{entry.description}</div>
-                          <div className="text-xs text-muted-foreground">{entry.lines?.length || 0} lines</div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={entry.status === 'posted' ? 'default' : 'secondary'}>
-                            {entry.status.toUpperCase()}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right font-semibold">{formatCurrency(amount)}</TableCell>
-                        <TableCell className="text-right">
-                          {entry.status === 'draft' && (
-                            <Button variant="ghost" size="sm" onClick={() => handlePostEntry(entry.id)} className="text-green-600">
-                              <CheckCircle2 className="w-4 h-4 mr-1" /> Post
-                            </Button>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </Card>
-          </TabsContent>
-
-          {/* CHART OF ACCOUNTS TAB */}
-          <TabsContent value="chart-of-accounts" className="space-y-4">
-            <Card>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-24">Code</TableHead>
-                    <TableHead>Account Name</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead className="text-right">Current Balance</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {accounts.map(acc => (
-                    <TableRow key={acc.id}>
-                      <TableCell className="font-mono">{acc.code}</TableCell>
-                      <TableCell className="font-medium">{acc.name}</TableCell>
-                      <TableCell className="capitalize">{acc.type}</TableCell>
-                      <TableCell>{acc.category}</TableCell>
-                      <TableCell className="text-right font-semibold">
-                        {formatCurrency(statements.balances[acc.id] || 0)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Card>
-          </TabsContent>
-
-          {/* Financial Statements Tab */}
-          <TabsContent value="financial-statements" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Profit & Loss */}
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <div>
-                    <CardTitle>Profit & Loss Statement</CardTitle>
-                    <CardDescription>Income statement for the period</CardDescription>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline" onClick={exportProfitAndLossToPDF}>
-                      <FileText className="h-4 w-4 mr-2" />
-                      PDF
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={exportProfitAndLossToExcel}>
-                      <FileSpreadsheet className="h-4 w-4 mr-2" />
-                      Excel
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-6 space-y-4">
-                  <div className="flex justify-between items-end border-b pb-2">
-                    <span className="font-semibold text-lg">Revenue</span>
-                    <span className="font-bold text-lg">{formatCurrency(statements.revenue)}</span>
-                  </div>
-                  
-                  <div className="space-y-2 pl-4">
-                    <div className="text-sm font-medium text-muted-foreground mb-1">Direct Costs (COGS)</div>
-                    {accounts.filter(a => a.type === 'expense' && a.category.includes('Direct') && (statements.balances[a.id] || 0) !== 0).map(acc => (
-                      <div key={acc.id} className="flex justify-between text-sm">
-                        <span>{acc.name}</span>
-                        <span>{formatCurrency(statements.balances[acc.id] || 0)}</span>
-                      </div>
-                    ))}
-                    <div className="flex justify-between font-semibold border-t pt-2">
-                      <span>Total Direct Costs</span>
-                      <span>{formatCurrency(statements.directCosts)}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-between items-end border-b border-t py-3 bg-muted/10 px-2 rounded">
-                    <span className="font-bold text-sm uppercase">Gross Profit</span>
-                    <span className="font-bold text-primary">{formatCurrency(statements.grossProfit)}</span>
-                  </div>
-
-                  <div className="space-y-2 pl-4">
-                    <div className="text-sm font-medium text-muted-foreground mb-1">Overhead Expenses</div>
-                    {accounts.filter(a => a.type === 'expense' && a.category.includes('Overhead') && (statements.balances[a.id] || 0) !== 0).map(acc => (
-                      <div key={acc.id} className="flex justify-between text-sm">
-                        <span>{acc.name}</span>
-                        <span>{formatCurrency(statements.balances[acc.id] || 0)}</span>
-                      </div>
-                    ))}
-                    <div className="flex justify-between font-semibold border-t pt-2">
-                      <span>Total Overhead</span>
-                      <span>{formatCurrency(statements.overhead)}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-between items-end border-t-2 border-primary pt-3 px-2 mt-4">
-                    <span className="font-bold text-sm uppercase">Net Income</span>
-                    <span className={`font-bold text-xl ${statements.netIncome >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {formatCurrency(statements.netIncome)}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Balance Sheet */}
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <div>
-                    <CardTitle>Balance Sheet</CardTitle>
-                    <CardDescription>Financial position as of today</CardDescription>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline" onClick={exportBalanceSheetToPDF}>
-                      <FileText className="h-4 w-4 mr-2" />
-                      PDF
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={exportBalanceSheetToExcel}>
-                      <FileSpreadsheet className="h-4 w-4 mr-2" />
-                      Excel
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-6 space-y-4">
-                  {/* ASSETS */}
-                  <div className="space-y-2">
-                    <div className="font-semibold text-lg border-b pb-1">Assets</div>
-                    {accounts.filter(a => a.type === 'asset' && !a.name.includes('Property') && !a.name.includes('Equipment') && !a.name.includes('Accumulated') && (statements.balances[a.id] || 0) !== 0).map(acc => (
-                      <div key={acc.id} className="flex justify-between text-sm pl-4">
-                        <span>{acc.name}</span>
-                        <span>{formatCurrency(statements.balances[acc.id] || 0)}</span>
-                      </div>
-                    ))}
-                    <div className="flex justify-between font-bold border-t pt-2 bg-muted/10 px-2 rounded">
-                      <span>Total Assets</span>
-                      <span>{formatCurrency(statements.assets)}</span>
-                    </div>
-                  </div>
-
-                  {/* LIABILITIES */}
-                  <div className="space-y-2 pt-4">
-                    <div className="font-semibold text-lg border-b pb-1">Liabilities</div>
-                    {accounts.filter(a => a.type === 'liability' && !a.name.includes('Long-term') && !a.name.includes('Retention') && (statements.balances[a.id] || 0) !== 0).map(acc => (
-                      <div key={acc.id} className="flex justify-between text-sm pl-4">
-                        <span>{acc.name}</span>
-                        <span>{formatCurrency(statements.balances[acc.id] || 0)}</span>
-                      </div>
-                    ))}
-                    <div className="flex justify-between font-bold border-t pt-2 bg-muted/10 px-2 rounded">
-                      <span>Total Liabilities</span>
-                      <span>{formatCurrency(statements.liabilities)}</span>
-                    </div>
-                  </div>
-
-                  {/* EQUITY */}
-                  <div className="space-y-2 pt-4">
-                    <div className="font-semibold text-lg border-b pb-1">Equity</div>
-                    {accounts.filter(a => a.type === 'equity' && !a.name.includes('Long-term') && !a.name.includes('Retention') && (statements.balances[a.id] || 0) !== 0).map(acc => (
-                      <div key={acc.id} className="flex justify-between text-sm pl-4">
-                        <span>{acc.name}</span>
-                        <span>{formatCurrency(statements.balances[acc.id] || 0)}</span>
-                      </div>
-                    ))}
-                    <div className="flex justify-between text-sm pl-4 text-muted-foreground italic">
-                      <span>Current Year Net Income</span>
-                      <span>{formatCurrency(statements.netIncome)}</span>
-                    </div>
-                    <div className="flex justify-between font-bold border-t pt-2 bg-muted/10 px-2 rounded">
-                      <span>Total Equity</span>
-                      <span>{formatCurrency(statements.totalEquity)}</span>
-                    </div>
-                  </div>
-
-                  {/* CHECK */}
-                  <div className="flex justify-between items-end border-t-2 border-primary pt-3 px-2 mt-4">
-                    <span className="font-bold text-sm uppercase">Total Liab. & Equity</span>
-                    <span className="font-bold">
-                      {formatCurrency(statements.liabilities + statements.totalEquity)}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          {/* AR Aging Tab */}
-          <TabsContent value="ar-aging" className="space-y-6">
+          <TabsContent value="journal">
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle>Accounts Receivable Aging Report</CardTitle>
-                    <CardDescription>Outstanding customer invoices by aging period</CardDescription>
+                    <CardTitle>Journal Entries</CardTitle>
+                    <CardDescription>Record financial transactions</CardDescription>
                   </div>
-                  <Button onClick={loadARAgingReport}>
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Refresh
-                  </Button>
+                  <Dialog open={journalDialogOpen} onOpenChange={setJournalDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button onClick={() => { setEditingEntry(null); setNewEntry({ description: "", date: new Date().toISOString().split("T")[0], projectId: "" }); setJournalLines([{ accountId: "", description: "", debit: 0, credit: 0 }]); }}>
+                        <Plus className="h-4 w-4 mr-2" />
+                        New Entry
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                      <DialogHeader>
+                        <DialogTitle>{editingEntry ? "Edit" : "Create"} Journal Entry</DialogTitle>
+                        <DialogDescription>Record a new financial transaction</DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <div>
+                          <Label htmlFor="description">Description</Label>
+                          <Input id="description" value={newEntry.description} onChange={(e) => setNewEntry({ ...newEntry, description: e.target.value })} placeholder="Transaction description" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="date">Date</Label>
+                            <Input id="date" type="date" value={newEntry.date} onChange={(e) => setNewEntry({ ...newEntry, date: e.target.value })} />
+                          </div>
+                          <div>
+                            <Label htmlFor="project">Project (Optional)</Label>
+                            <Select value={newEntry.projectId} onValueChange={(value) => setNewEntry({ ...newEntry, projectId: value })}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select project" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {projects.map((project) => (
+                                  <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label>Journal Lines</Label>
+                            <Button type="button" size="sm" variant="outline" onClick={handleAddLine}>
+                              <Plus className="h-4 w-4 mr-2" />
+                              Add Line
+                            </Button>
+                          </div>
+                          <div className="border rounded-lg overflow-hidden">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Account</TableHead>
+                                  <TableHead>Description</TableHead>
+                                  <TableHead className="text-right">Debit</TableHead>
+                                  <TableHead className="text-right">Credit</TableHead>
+                                  <TableHead className="w-[50px]"></TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {journalLines.map((line, index) => (
+                                  <TableRow key={index}>
+                                    <TableCell>
+                                      <Select value={line.accountId} onValueChange={(value) => handleLineChange(index, "accountId", value)}>
+                                        <SelectTrigger>
+                                          <SelectValue placeholder="Select account" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {accounts.map((account) => (
+                                            <SelectItem key={account.id} value={account.id}>{account.code} - {account.name}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Input value={line.description} onChange={(e) => handleLineChange(index, "description", e.target.value)} placeholder="Line description" />
+                                    </TableCell>
+                                    <TableCell>
+                                      <Input type="number" step="0.01" value={line.debit || ""} onChange={(e) => handleLineChange(index, "debit", parseFloat(e.target.value) || 0)} className="text-right" />
+                                    </TableCell>
+                                    <TableCell>
+                                      <Input type="number" step="0.01" value={line.credit || ""} onChange={(e) => handleLineChange(index, "credit", parseFloat(e.target.value) || 0)} className="text-right" />
+                                    </TableCell>
+                                    <TableCell>
+                                      <Button type="button" size="icon" variant="ghost" onClick={() => handleRemoveLine(index)} disabled={journalLines.length === 1}>
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                          <div className="flex justify-end space-x-4 text-sm font-medium pt-2 border-t">
+                            <div>Total Debit: {formatCurrency(totalDebit)}</div>
+                            <div>Total Credit: {formatCurrency(totalCredit)}</div>
+                          </div>
+                          {!isBalanced && <p className="text-sm text-destructive">Entry must be balanced (debit = credit)</p>}
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button variant="outline" onClick={() => setJournalDialogOpen(false)}>Cancel</Button>
+                        <Button onClick={handleSaveEntry} disabled={!isBalanced}>Save Entry</Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead>Project</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {journalEntries.map((entry) => {
+                      const totalAmount = entry.lines?.reduce((sum, line) => sum + line.debit, 0) || 0;
+                      return (
+                        <TableRow key={entry.id}>
+                          <TableCell>{new Date(entry.date).toLocaleDateString()}</TableCell>
+                          <TableCell>{entry.description}</TableCell>
+                          <TableCell>{entry.project?.name || "-"}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(totalAmount)}</TableCell>
+                          <TableCell>
+                            <Badge variant={entry.status === "posted" ? "default" : "secondary"}>
+                              {entry.status === "posted" ? <CheckCircle className="h-3 w-3 mr-1" /> : <Clock className="h-3 w-3 mr-1" />}
+                              {entry.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {entry.status === "draft" && (
+                              <Button size="sm" variant="outline" onClick={() => handlePostEntry(entry.id)}>
+                                Post
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="accounts">
+            <Card>
+              <CardHeader>
+                <CardTitle>Chart of Accounts</CardTitle>
+                <CardDescription>View all accounts and their balances</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Code</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead className="text-right">Balance</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {accounts.map((account) => (
+                      <TableRow key={account.id}>
+                        <TableCell className="font-mono">{account.code}</TableCell>
+                        <TableCell>{account.name}</TableCell>
+                        <TableCell className="capitalize">{account.type}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(account.balance)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="statements">
+            <div className="grid gap-6">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>Profit & Loss Statement</CardTitle>
+                      <CardDescription>Income statement for the current period</CardDescription>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={() => exportProfitAndLossToPDF(statements.profitAndLoss)}>
+                        <FileText className="h-4 w-4 mr-2" />
+                        Export PDF
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => exportProfitAndLossToExcel(statements.profitAndLoss)}>
+                        <Download className="h-4 w-4 mr-2" />
+                        Export Excel
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="font-semibold mb-2">Revenue</h3>
+                      <Table>
+                        <TableBody>
+                          {statements.profitAndLoss.revenue.map((account) => (
+                            <TableRow key={account.id}>
+                              <TableCell>{account.name}</TableCell>
+                              <TableCell className="text-right">{formatCurrency(account.balance)}</TableCell>
+                            </TableRow>
+                          ))}
+                          <TableRow className="font-semibold">
+                            <TableCell>Total Revenue</TableCell>
+                            <TableCell className="text-right">{formatCurrency(statements.profitAndLoss.totalRevenue)}</TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                    </div>
+                    <div>
+                      <h3 className="font-semibold mb-2">Cost of Goods Sold</h3>
+                      <Table>
+                        <TableBody>
+                          {statements.profitAndLoss.cogs.map((account) => (
+                            <TableRow key={account.id}>
+                              <TableCell>{account.name}</TableCell>
+                              <TableCell className="text-right">{formatCurrency(account.balance)}</TableCell>
+                            </TableRow>
+                          ))}
+                          <TableRow className="font-semibold">
+                            <TableCell>Total COGS</TableCell>
+                            <TableCell className="text-right">{formatCurrency(statements.profitAndLoss.totalCOGS)}</TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                    </div>
+                    <div className="border-t pt-4">
+                      <div className="flex justify-between font-semibold text-lg">
+                        <span>Gross Profit</span>
+                        <span>{formatCurrency(statements.profitAndLoss.grossProfit)}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <h3 className="font-semibold mb-2">Operating Expenses</h3>
+                      <Table>
+                        <TableBody>
+                          {statements.profitAndLoss.expenses.map((account) => (
+                            <TableRow key={account.id}>
+                              <TableCell>{account.name}</TableCell>
+                              <TableCell className="text-right">{formatCurrency(account.balance)}</TableCell>
+                            </TableRow>
+                          ))}
+                          <TableRow className="font-semibold">
+                            <TableCell>Total Expenses</TableCell>
+                            <TableCell className="text-right">{formatCurrency(statements.profitAndLoss.totalExpenses)}</TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                    </div>
+                    <div className="border-t pt-4">
+                      <div className="flex justify-between font-bold text-xl">
+                        <span>Net Income</span>
+                        <span className={statements.profitAndLoss.netIncome >= 0 ? "text-green-600" : "text-red-600"}>
+                          {formatCurrency(statements.profitAndLoss.netIncome)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>Balance Sheet</CardTitle>
+                      <CardDescription>Statement of financial position</CardDescription>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={() => exportBalanceSheetToPDF(statements.balanceSheet)}>
+                        <FileText className="h-4 w-4 mr-2" />
+                        Export PDF
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => exportBalanceSheetToExcel(statements.balanceSheet)}>
+                        <Download className="h-4 w-4 mr-2" />
+                        Export Excel
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="font-semibold mb-2">Assets</h3>
+                        <Table>
+                          <TableBody>
+                            {statements.balanceSheet.assets.map((account) => (
+                              <TableRow key={account.id}>
+                                <TableCell>{account.name}</TableCell>
+                                <TableCell className="text-right">{formatCurrency(account.balance)}</TableCell>
+                              </TableRow>
+                            ))}
+                            <TableRow className="font-semibold">
+                              <TableCell>Total Assets</TableCell>
+                              <TableCell className="text-right">{formatCurrency(statements.balanceSheet.totalAssets)}</TableCell>
+                            </TableRow>
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="font-semibold mb-2">Liabilities</h3>
+                        <Table>
+                          <TableBody>
+                            {statements.balanceSheet.liabilities.map((account) => (
+                              <TableRow key={account.id}>
+                                <TableCell>{account.name}</TableCell>
+                                <TableCell className="text-right">{formatCurrency(account.balance)}</TableCell>
+                              </TableRow>
+                            ))}
+                            <TableRow className="font-semibold">
+                              <TableCell>Total Liabilities</TableCell>
+                              <TableCell className="text-right">{formatCurrency(statements.balanceSheet.totalLiabilities)}</TableCell>
+                            </TableRow>
+                          </TableBody>
+                        </Table>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold mb-2">Equity</h3>
+                        <Table>
+                          <TableBody>
+                            {statements.balanceSheet.equity.map((account) => (
+                              <TableRow key={account.id}>
+                                <TableCell>{account.name}</TableCell>
+                                <TableCell className="text-right">{formatCurrency(account.balance)}</TableCell>
+                              </TableRow>
+                            ))}
+                            <TableRow>
+                              <TableCell>Net Income</TableCell>
+                              <TableCell className="text-right">{formatCurrency(statements.profitAndLoss.netIncome)}</TableCell>
+                            </TableRow>
+                            <TableRow className="font-semibold">
+                              <TableCell>Total Equity</TableCell>
+                              <TableCell className="text-right">{formatCurrency(statements.balanceSheet.totalEquity)}</TableCell>
+                            </TableRow>
+                          </TableBody>
+                        </Table>
+                      </div>
+                      <div className="border-t pt-4">
+                        <div className="flex justify-between font-bold">
+                          <span>Total Liabilities & Equity</span>
+                          <span>{formatCurrency(statements.balanceSheet.totalLiabilities + statements.balanceSheet.totalEquity)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="ar-aging">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Accounts Receivable Aging</CardTitle>
+                    <CardDescription>Track outstanding customer invoices</CardDescription>
+                  </div>
+                  <Button onClick={loadARAgingReport}>Load Report</Button>
                 </div>
               </CardHeader>
               <CardContent>
                 {arAging ? (
-                  <>
-                    {/* Summary Cards */}
-                    <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-5 gap-4">
                       <Card>
                         <CardHeader className="pb-2">
-                          <CardDescription>Current</CardDescription>
+                          <CardTitle className="text-sm">Current</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <div className="text-2xl font-bold text-green-600">
-                            {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(arAging.summary.current)}
-                          </div>
+                          <div className="text-2xl font-bold">{formatCurrency(arAging.current)}</div>
                         </CardContent>
                       </Card>
                       <Card>
                         <CardHeader className="pb-2">
-                          <CardDescription>1-30 Days</CardDescription>
+                          <CardTitle className="text-sm">1-30 Days</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <div className="text-2xl font-bold text-blue-600">
-                            {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(arAging.summary.days1_30)}
-                          </div>
+                          <div className="text-2xl font-bold">{formatCurrency(arAging.days1to30)}</div>
                         </CardContent>
                       </Card>
                       <Card>
                         <CardHeader className="pb-2">
-                          <CardDescription>31-60 Days</CardDescription>
+                          <CardTitle className="text-sm">31-60 Days</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <div className="text-2xl font-bold text-yellow-600">
-                            {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(arAging.summary.days31_60)}
-                          </div>
+                          <div className="text-2xl font-bold">{formatCurrency(arAging.days31to60)}</div>
                         </CardContent>
                       </Card>
                       <Card>
                         <CardHeader className="pb-2">
-                          <CardDescription>61-90 Days</CardDescription>
+                          <CardTitle className="text-sm">61-90 Days</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <div className="text-2xl font-bold text-orange-600">
-                            {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(arAging.summary.days61_90)}
-                          </div>
+                          <div className="text-2xl font-bold">{formatCurrency(arAging.days61to90)}</div>
                         </CardContent>
                       </Card>
                       <Card>
                         <CardHeader className="pb-2">
-                          <CardDescription>90+ Days</CardDescription>
+                          <CardTitle className="text-sm">90+ Days</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <div className="text-2xl font-bold text-red-600">
-                            {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(arAging.summary.days90Plus)}
-                          </div>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardHeader className="pb-2">
-                          <CardDescription>Total Outstanding</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="text-2xl font-bold">
-                            {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(arAging.summary.total)}
-                          </div>
+                          <div className="text-2xl font-bold text-destructive">{formatCurrency(arAging.over90)}</div>
                         </CardContent>
                       </Card>
                     </div>
-
-                    {/* Detailed Table */}
-                    <div className="border rounded-lg overflow-hidden">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Invoice #</TableHead>
-                            <TableHead>Date</TableHead>
-                            <TableHead>Client</TableHead>
-                            <TableHead>Project</TableHead>
-                            <TableHead className="text-right">Amount</TableHead>
-                            <TableHead className="text-right">Outstanding</TableHead>
-                            <TableHead className="text-center">Days</TableHead>
-                            <TableHead>Aging Bucket</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {arAging.invoices.map((inv: any) => (
-                            <TableRow key={inv.id}>
-                              <TableCell className="font-medium">{inv.invoice_no}</TableCell>
-                              <TableCell>{format(new Date(inv.date), "MMM d, yyyy")}</TableCell>
-                              <TableCell>{inv.client}</TableCell>
-                              <TableCell>{inv.projectName}</TableCell>
-                              <TableCell className="text-right">
-                                {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(inv.net_amount)}
-                              </TableCell>
-                              <TableCell className="text-right font-semibold">
-                                {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(inv.outstanding)}
-                              </TableCell>
-                              <TableCell className="text-center">{inv.daysOutstanding}</TableCell>
-                              <TableCell>
-                                <Badge
-                                  variant={
-                                    inv.agingBucket === "Current"
-                                      ? "default"
-                                      : inv.agingBucket === "1-30 days"
-                                      ? "secondary"
-                                      : inv.agingBucket === "31-60 days"
-                                      ? "outline"
-                                      : "destructive"
-                                  }
-                                >
-                                  {inv.agingBucket}
-                                </Badge>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                    <div className="border-t pt-4">
+                      <div className="flex justify-between text-lg font-semibold">
+                        <span>Total Receivables</span>
+                        <span>{formatCurrency(arAging.total)}</span>
+                      </div>
                     </div>
-                  </>
-                ) : (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <p>Click "Refresh" to load AR Aging Report</p>
                   </div>
+                ) : (
+                  <p className="text-muted-foreground">Click "Load Report" to view AR aging</p>
                 )}
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* AP Aging Tab */}
-          <TabsContent value="ap-aging" className="space-y-6">
+          <TabsContent value="ap-aging">
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle>Accounts Payable Aging Report</CardTitle>
-                    <CardDescription>Outstanding vendor bills by aging period</CardDescription>
+                    <CardTitle>Accounts Payable Aging</CardTitle>
+                    <CardDescription>Track outstanding vendor bills</CardDescription>
                   </div>
-                  <Button onClick={loadAPAgingReport}>
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Refresh
-                  </Button>
+                  <Button onClick={loadAPAgingReport}>Load Report</Button>
                 </div>
               </CardHeader>
               <CardContent>
                 {apAging ? (
-                  <>
-                    {/* Summary Cards */}
-                    <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-5 gap-4">
                       <Card>
                         <CardHeader className="pb-2">
-                          <CardDescription>Current</CardDescription>
+                          <CardTitle className="text-sm">Current</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <div className="text-2xl font-bold text-green-600">
-                            {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(apAging.summary.current)}
-                          </div>
+                          <div className="text-2xl font-bold">{formatCurrency(apAging.current)}</div>
                         </CardContent>
                       </Card>
                       <Card>
                         <CardHeader className="pb-2">
-                          <CardDescription>1-30 Days</CardDescription>
+                          <CardTitle className="text-sm">1-30 Days</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <div className="text-2xl font-bold text-blue-600">
-                            {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(apAging.summary.days1_30)}
-                          </div>
+                          <div className="text-2xl font-bold">{formatCurrency(apAging.days1to30)}</div>
                         </CardContent>
                       </Card>
                       <Card>
                         <CardHeader className="pb-2">
-                          <CardDescription>31-60 Days</CardDescription>
+                          <CardTitle className="text-sm">31-60 Days</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <div className="text-2xl font-bold text-yellow-600">
-                            {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(apAging.summary.days31_60)}
-                          </div>
+                          <div className="text-2xl font-bold">{formatCurrency(apAging.days31to60)}</div>
                         </CardContent>
                       </Card>
                       <Card>
                         <CardHeader className="pb-2">
-                          <CardDescription>61-90 Days</CardDescription>
+                          <CardTitle className="text-sm">61-90 Days</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <div className="text-2xl font-bold text-orange-600">
-                            {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(apAging.summary.days61_90)}
-                          </div>
+                          <div className="text-2xl font-bold">{formatCurrency(apAging.days61to90)}</div>
                         </CardContent>
                       </Card>
                       <Card>
                         <CardHeader className="pb-2">
-                          <CardDescription>90+ Days</CardDescription>
+                          <CardTitle className="text-sm">90+ Days</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <div className="text-2xl font-bold text-red-600">
-                            {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(apAging.summary.days90Plus)}
-                          </div>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardHeader className="pb-2">
-                          <CardDescription>Total Payable</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="text-2xl font-bold">
-                            {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(apAging.summary.total)}
-                          </div>
+                          <div className="text-2xl font-bold text-destructive">{formatCurrency(apAging.over90)}</div>
                         </CardContent>
                       </Card>
                     </div>
-
-                    {/* Detailed Table */}
-                    <div className="border rounded-lg overflow-hidden">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Entry #</TableHead>
-                            <TableHead>Date</TableHead>
-                            <TableHead>Description</TableHead>
-                            <TableHead>Project</TableHead>
-                            <TableHead className="text-right">Amount</TableHead>
-                            <TableHead className="text-right">Outstanding</TableHead>
-                            <TableHead className="text-center">Days</TableHead>
-                            <TableHead>Aging Bucket</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {apAging.bills.map((bill: any) => (
-                            <TableRow key={bill.id}>
-                              <TableCell className="font-medium">{bill.entryNumber}</TableCell>
-                              <TableCell>{format(new Date(bill.date), "MMM d, yyyy")}</TableCell>
-                              <TableCell>{bill.description}</TableCell>
-                              <TableCell>{bill.projectName}</TableCell>
-                              <TableCell className="text-right">
-                                {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(bill.amount)}
-                              </TableCell>
-                              <TableCell className="text-right font-semibold">
-                                {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(bill.outstanding)}
-                              </TableCell>
-                              <TableCell className="text-center">{bill.daysOutstanding}</TableCell>
-                              <TableCell>
-                                <Badge
-                                  variant={
-                                    bill.agingBucket === "Current"
-                                      ? "default"
-                                      : bill.agingBucket === "1-30 days"
-                                      ? "secondary"
-                                      : bill.agingBucket === "31-60 days"
-                                      ? "outline"
-                                      : "destructive"
-                                  }
-                                >
-                                  {bill.agingBucket}
-                                </Badge>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                    <div className="border-t pt-4">
+                      <div className="flex justify-between text-lg font-semibold">
+                        <span>Total Payables</span>
+                        <span>{formatCurrency(apAging.total)}</span>
+                      </div>
                     </div>
-                  </>
-                ) : (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <p>Click "Refresh" to load AP Aging Report</p>
                   </div>
+                ) : (
+                  <p className="text-muted-foreground">Click "Load Report" to view AP aging</p>
                 )}
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* RECURRING ENTRIES TAB */}
-          <TabsContent value="recurring-entries" className="space-y-6">
+          <TabsContent value="recurring">
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
                     <CardTitle>Recurring Journal Entries</CardTitle>
-                    <CardDescription>
-                      Automate repetitive monthly transactions like rent, utilities, and salaries
-                    </CardDescription>
+                    <CardDescription>Automate repetitive transactions</CardDescription>
                   </div>
                   <div className="flex gap-2">
-                    <Button onClick={handleGenerateRecurringEntries} variant="outline">
-                      <RefreshCw className="h-4 w-4 mr-2" />
+                    <Button variant="outline" onClick={handleGenerateRecurringEntries}>
+                      <Clock className="h-4 w-4 mr-2" />
                       Generate Due Entries
                     </Button>
-                    <Button onClick={() => {
-                      setEditingRecurring(null);
-                      setRecurringFormData({
-                        description: "",
-                        frequency: "monthly",
-                        startDate: new Date().toISOString().split("T")[0],
-                        endDate: "",
-                        projectId: "",
-                        isActive: true,
-                      });
-                      setRecurringLines([
-                        { accountId: "", description: "", debit: 0, credit: 0 },
-                        { accountId: "", description: "", debit: 0, credit: 0 },
-                      ]);
-                      setRecurringDialogOpen(true);
-                    }}>
+                    <Button onClick={() => { setRecurringDialogOpen(true); loadRecurringEntries(); }}>
                       <Plus className="h-4 w-4 mr-2" />
                       New Recurring Entry
                     </Button>
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Filters */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-muted/50 rounded-lg">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Search</label>
-                    <Input
-                      placeholder="Search description..."
-                      value={recurringFilters.search}
-                      onChange={(e) => setRecurringFilters({ ...recurringFilters, search: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Frequency</label>
-                    <Select
-                      value={recurringFilters.frequency}
-                      onValueChange={(value) => {
-                        setRecurringFilters({ ...recurringFilters, frequency: value });
-                        setRecurringPage(1);
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search by description..."
+                          value={recurringSearchQuery}
+                          onChange={(e) => setRecurringSearchQuery(e.target.value)}
+                          className="pl-10"
+                        />
+                      </div>
+                    </div>
+                    <Select value={recurringFrequencyFilter} onValueChange={setRecurringFrequencyFilter}>
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Frequency" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Frequencies</SelectItem>
@@ -981,18 +1009,9 @@ export default function AccountingPage() {
                         <SelectItem value="yearly">Yearly</SelectItem>
                       </SelectContent>
                     </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Status</label>
-                    <Select
-                      value={recurringFilters.status}
-                      onValueChange={(value) => {
-                        setRecurringFilters({ ...recurringFilters, status: value });
-                        setRecurringPage(1);
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
+                    <Select value={recurringStatusFilter} onValueChange={setRecurringStatusFilter}>
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Status" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Status</SelectItem>
@@ -1000,16 +1019,15 @@ export default function AccountingPage() {
                         <SelectItem value="inactive">Inactive</SelectItem>
                       </SelectContent>
                     </Select>
+                    <Button variant="outline" onClick={() => { setRecurringSearchQuery(""); setRecurringFrequencyFilter("all"); setRecurringStatusFilter("all"); }}>
+                      Clear Filters
+                    </Button>
                   </div>
-                </div>
 
-                {/* Results count */}
-                <div className="text-sm text-muted-foreground">
-                  Showing {paginatedRecurringEntries.length} of {filteredRecurringEntries.length} entries
-                </div>
+                  <div className="text-sm text-muted-foreground">
+                    Showing {filteredRecurringEntries.length} of {recurringEntries.length} entries
+                  </div>
 
-                {/* Table */}
-                <div className="border rounded-lg overflow-hidden">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -1018,163 +1036,227 @@ export default function AccountingPage() {
                         <TableHead>Next Run</TableHead>
                         <TableHead>Project</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
+                        <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {paginatedRecurringEntries.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
-                            {recurringFilters.search || recurringFilters.frequency !== "all" || recurringFilters.status !== "all"
-                              ? "No recurring entries match your filters"
-                              : "No recurring entries yet. Click 'New Recurring Entry' to create one."}
+                      {paginatedRecurringEntries.map((entry) => (
+                        <TableRow key={entry.id}>
+                          <TableCell>{entry.description}</TableCell>
+                          <TableCell className="capitalize">{entry.frequency}</TableCell>
+                          <TableCell>{new Date(entry.nextOccurrence).toLocaleDateString()}</TableCell>
+                          <TableCell>{entry.project?.name || "-"}</TableCell>
+                          <TableCell>
+                            <Badge variant={entry.isActive ? "default" : "secondary"}>
+                              {entry.isActive ? "Active" : "Inactive"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Button size="sm" variant="outline" onClick={() => {
+                              setEditingRecurring(entry);
+                              setNewRecurring({
+                                description: entry.description,
+                                frequency: entry.frequency,
+                                startDate: entry.startDate,
+                                endDate: entry.endDate || "",
+                                projectId: entry.projectId || "",
+                                isActive: entry.isActive,
+                              });
+                              setRecurringLines(entry.lines.map(l => ({ accountId: l.accountId, description: l.description, debit: l.debit, credit: l.credit })));
+                              setRecurringDialogOpen(true);
+                            }}>
+                              Edit
+                            </Button>
                           </TableCell>
                         </TableRow>
-                      ) : (
-                        paginatedRecurringEntries.map((entry) => (
-                          <TableRow key={entry.id}>
-                            <TableCell className="font-medium">{entry.description}</TableCell>
-                            <TableCell>
-                              <Badge variant="outline" className="capitalize">
-                                {entry.frequency}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>{new Date(entry.nextOccurrence).toLocaleDateString()}</TableCell>
-                            <TableCell>
-                              {entry.projectId
-                                ? projects.find((p) => p.id === entry.projectId)?.name || "Unknown"
-                                : "General"}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant={entry.isActive ? "default" : "secondary"}>
-                                {entry.isActive ? "Active" : "Inactive"}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setEditingRecurring(entry);
-                                  setRecurringFormData({
-                                    description: entry.description,
-                                    frequency: entry.frequency,
-                                    startDate: entry.startDate,
-                                    endDate: entry.endDate || "",
-                                    projectId: entry.projectId || "",
-                                    isActive: entry.isActive,
-                                  });
-                                  setRecurringLines(entry.lines || []);
-                                  setRecurringDialogOpen(true);
-                                }}
-                              >
-                                Edit
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
+                      ))}
                     </TableBody>
                   </Table>
-                </div>
 
-                {/* Pagination */}
-                {totalRecurringPages > 1 && (
                   <div className="flex items-center justify-between">
                     <div className="text-sm text-muted-foreground">
-                      Page {recurringPage} of {totalRecurringPages}
+                      Page {recurringPage} of {recurringTotalPages}
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-2">
                       <Button
-                        variant="outline"
                         size="sm"
+                        variant="outline"
+                        onClick={() => setRecurringPage(p => Math.max(1, p - 1))}
                         disabled={recurringPage === 1}
-                        onClick={() => setRecurringPage(recurringPage - 1)}
                       >
                         Previous
                       </Button>
                       <Button
-                        variant="outline"
                         size="sm"
-                        disabled={recurringPage === totalRecurringPages}
-                        onClick={() => setRecurringPage(recurringPage + 1)}
+                        variant="outline"
+                        onClick={() => setRecurringPage(p => Math.min(recurringTotalPages, p + 1))}
+                        disabled={recurringPage === recurringTotalPages}
                       >
                         Next
                       </Button>
                     </div>
                   </div>
-                )}
+                </div>
+
+                <Dialog open={recurringDialogOpen} onOpenChange={setRecurringDialogOpen}>
+                  <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>{editingRecurring ? "Edit" : "Create"} Recurring Entry</DialogTitle>
+                      <DialogDescription>Set up automatic journal entry generation</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div>
+                        <Label>Description</Label>
+                        <Input value={newRecurring.description} onChange={(e) => setNewRecurring({ ...newRecurring, description: e.target.value })} placeholder="Monthly rent payment" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label>Frequency</Label>
+                          <Select value={newRecurring.frequency} onValueChange={(value: any) => setNewRecurring({ ...newRecurring, frequency: value })}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="daily">Daily</SelectItem>
+                              <SelectItem value="weekly">Weekly</SelectItem>
+                              <SelectItem value="monthly">Monthly</SelectItem>
+                              <SelectItem value="quarterly">Quarterly</SelectItem>
+                              <SelectItem value="yearly">Yearly</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label>Project (Optional)</Label>
+                          <Select value={newRecurring.projectId} onValueChange={(value) => setNewRecurring({ ...newRecurring, projectId: value })}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select project" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {projects.map((project) => (
+                                <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label>Start Date</Label>
+                          <Input type="date" value={newRecurring.startDate} onChange={(e) => setNewRecurring({ ...newRecurring, startDate: e.target.value })} />
+                        </div>
+                        <div>
+                          <Label>End Date (Optional)</Label>
+                          <Input type="date" value={newRecurring.endDate} onChange={(e) => setNewRecurring({ ...newRecurring, endDate: e.target.value })} />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Journal Lines</Label>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Account</TableHead>
+                              <TableHead>Description</TableHead>
+                              <TableHead>Debit</TableHead>
+                              <TableHead>Credit</TableHead>
+                              <TableHead></TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {recurringLines.map((line, index) => (
+                              <TableRow key={index}>
+                                <TableCell>
+                                  <Select value={line.accountId} onValueChange={(value) => {
+                                    const updated = [...recurringLines];
+                                    updated[index].accountId = value;
+                                    setRecurringLines(updated);
+                                  }}>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Account" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {accounts.map((account) => (
+                                        <SelectItem key={account.id} value={account.id}>{account.code} - {account.name}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </TableCell>
+                                <TableCell>
+                                  <Input value={line.description} onChange={(e) => {
+                                    const updated = [...recurringLines];
+                                    updated[index].description = e.target.value;
+                                    setRecurringLines(updated);
+                                  }} />
+                                </TableCell>
+                                <TableCell>
+                                  <Input type="number" step="0.01" value={line.debit || ""} onChange={(e) => {
+                                    const updated = [...recurringLines];
+                                    updated[index].debit = parseFloat(e.target.value) || 0;
+                                    setRecurringLines(updated);
+                                  }} />
+                                </TableCell>
+                                <TableCell>
+                                  <Input type="number" step="0.01" value={line.credit || ""} onChange={(e) => {
+                                    const updated = [...recurringLines];
+                                    updated[index].credit = parseFloat(e.target.value) || 0;
+                                    setRecurringLines(updated);
+                                  }} />
+                                </TableCell>
+                                <TableCell>
+                                  <Button size="icon" variant="ghost" onClick={() => setRecurringLines(recurringLines.filter((_, i) => i !== index))}>
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                        <Button size="sm" variant="outline" onClick={() => setRecurringLines([...recurringLines, { accountId: "", description: "", debit: 0, credit: 0 }])}>
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Line
+                        </Button>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setRecurringDialogOpen(false)}>Cancel</Button>
+                      <Button onClick={handleSaveRecurring}>Save</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* BANK RECONCILIATION TAB */}
-          <TabsContent value="bank-reconciliation" className="space-y-6">
+          <TabsContent value="reconciliation">
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
                     <CardTitle>Bank Reconciliation</CardTitle>
-                    <CardDescription>
-                      Match your accounting records with bank statements to ensure accuracy
-                    </CardDescription>
+                    <CardDescription>Match bank statements with accounting records</CardDescription>
                   </div>
-                  <Button onClick={() => {
-                    setEditingReconciliation(null);
-                    setReconciliationFormData({
-                      accountId: "",
-                      statementDate: new Date().toISOString().split("T")[0],
-                      statementBalance: 0,
-                      bookBalance: 0,
-                      reconciledBalance: 0,
-                      status: "in_progress",
-                    });
-                    setBankTransactions([]);
-                    setReconciliationDialogOpen(true);
-                  }}>
+                  <Button onClick={() => { setReconciliationDialogOpen(true); loadBankReconciliations(); }}>
                     <Plus className="h-4 w-4 mr-2" />
                     New Reconciliation
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Filters */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Bank Account</label>
-                    <Select
-                      value={reconciliationFilters.accountId}
-                      onValueChange={(value) => {
-                        setReconciliationFilters({ ...reconciliationFilters, accountId: value });
-                        setReconciliationPage(1);
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="All Accounts" />
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4">
+                    <Select value={reconAccountFilter} onValueChange={setReconAccountFilter}>
+                      <SelectTrigger className="w-[200px]">
+                        <SelectValue placeholder="Bank Account" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Accounts</SelectItem>
-                        {accounts
-                          .filter((acc) => acc.type === "asset" && acc.name.toLowerCase().includes("cash"))
-                          .map((acc) => (
-                            <SelectItem key={acc.id} value={acc.id}>
-                              {acc.code} - {acc.name}
-                            </SelectItem>
-                          ))}
+                        {accounts.filter(a => a.type === "asset" && a.code.startsWith("1")).map((account) => (
+                          <SelectItem key={account.id} value={account.id}>{account.name}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Status</label>
-                    <Select
-                      value={reconciliationFilters.status}
-                      onValueChange={(value) => {
-                        setReconciliationFilters({ ...reconciliationFilters, status: value });
-                        setReconciliationPage(1);
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
+                    <Select value={reconStatusFilter} onValueChange={setReconStatusFilter}>
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Status" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Status</SelectItem>
@@ -1182,544 +1264,343 @@ export default function AccountingPage() {
                         <SelectItem value="completed">Completed</SelectItem>
                       </SelectContent>
                     </Select>
+                    <div>
+                      <Label className="text-xs">Date From</Label>
+                      <Input type="date" value={reconDateFrom} onChange={(e) => setReconDateFrom(e.target.value)} />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Date To</Label>
+                      <Input type="date" value={reconDateTo} onChange={(e) => setReconDateTo(e.target.value)} />
+                    </div>
+                    <Button variant="outline" onClick={() => { setReconAccountFilter("all"); setReconStatusFilter("all"); setReconDateFrom(""); setReconDateTo(""); }}>
+                      Clear Filters
+                    </Button>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Date From</label>
-                    <Input
-                      type="date"
-                      value={reconciliationFilters.dateFrom}
-                      onChange={(e) => {
-                        setReconciliationFilters({ ...reconciliationFilters, dateFrom: e.target.value });
-                        setReconciliationPage(1);
-                      }}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Date To</label>
-                    <Input
-                      type="date"
-                      value={reconciliationFilters.dateTo}
-                      onChange={(e) => {
-                        setReconciliationFilters({ ...reconciliationFilters, dateTo: e.target.value });
-                        setReconciliationPage(1);
-                      }}
-                    />
-                  </div>
-                </div>
 
-                {/* Results count */}
-                <div className="text-sm text-muted-foreground">
-                  Showing {paginatedReconciliations.length} of {filteredReconciliations.length} reconciliations
-                </div>
+                  <div className="text-sm text-muted-foreground">
+                    Showing {filteredReconciliations.length} of {reconciliations.length} reconciliations
+                  </div>
 
-                {/* Table */}
-                <div className="border rounded-lg overflow-hidden">
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Bank Account</TableHead>
                         <TableHead>Statement Date</TableHead>
-                        <TableHead className="text-right">Statement Balance</TableHead>
-                        <TableHead className="text-right">Book Balance</TableHead>
-                        <TableHead className="text-right">Difference</TableHead>
+                        <TableHead>Statement Balance</TableHead>
+                        <TableHead>Book Balance</TableHead>
+                        <TableHead>Difference</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
+                        <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {paginatedReconciliations.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
-                            {reconciliationFilters.accountId !== "all" || reconciliationFilters.status !== "all" || reconciliationFilters.dateFrom || reconciliationFilters.dateTo
-                              ? "No reconciliations match your filters"
-                              : "No bank reconciliations yet. Click 'New Reconciliation' to start."}
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        paginatedReconciliations.map((rec) => {
-                          const difference = rec.statementBalance - rec.bookBalance;
-                          return (
-                            <TableRow key={rec.id}>
-                              <TableCell className="font-medium">
-                                {rec.account ? `${rec.account.code} - ${rec.account.name}` : "Unknown"}
-                              </TableCell>
-                              <TableCell>{new Date(rec.statementDate).toLocaleDateString()}</TableCell>
-                              <TableCell className="text-right">{formatCurrency(rec.statementBalance)}</TableCell>
-                              <TableCell className="text-right">{formatCurrency(rec.bookBalance)}</TableCell>
-                              <TableCell className="text-right">
-                                <span className={difference !== 0 ? "text-destructive font-semibold" : "text-green-600"}>
-                                  {formatCurrency(Math.abs(difference))}
-                                  {difference !== 0 && " ⚠️"}
-                                </span>
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant={rec.status === "completed" ? "default" : "secondary"}>
-                                  {rec.status === "in_progress" ? "In Progress" : "Completed"}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => {
-                                    setEditingReconciliation(rec);
-                                    setReconciliationFormData({
-                                      accountId: rec.accountId,
-                                      statementDate: rec.statementDate,
-                                      statementBalance: rec.statementBalance,
-                                      bookBalance: rec.bookBalance,
-                                      reconciledBalance: rec.reconciledBalance || 0,
-                                      status: rec.status,
-                                    });
-                                    setBankTransactions(rec.transactions || []);
-                                    setReconciliationDialogOpen(true);
-                                  }}
-                                >
-                                  View
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })
-                      )}
+                      {paginatedReconciliations.map((recon) => {
+                        const difference = recon.statementBalance - recon.bookBalance;
+                        return (
+                          <TableRow key={recon.id}>
+                            <TableCell>{recon.account?.name}</TableCell>
+                            <TableCell>{new Date(recon.statementDate).toLocaleDateString()}</TableCell>
+                            <TableCell>{formatCurrency(recon.statementBalance)}</TableCell>
+                            <TableCell>{formatCurrency(recon.bookBalance)}</TableCell>
+                            <TableCell className={difference !== 0 ? "text-destructive" : "text-green-600"}>
+                              {formatCurrency(Math.abs(difference))}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={recon.status === "completed" ? "default" : "secondary"}>
+                                {recon.status === "completed" ? <CheckCircle className="h-3 w-3 mr-1" /> : <Clock className="h-3 w-3 mr-1" />}
+                                {recon.status.replace("_", " ")}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Button size="sm" variant="outline" onClick={() => {
+                                setEditingReconciliation(recon);
+                                setNewReconciliation({
+                                  accountId: recon.accountId,
+                                  statementDate: recon.statementDate,
+                                  statementBalance: recon.statementBalance,
+                                  bookBalance: recon.bookBalance,
+                                  status: recon.status,
+                                });
+                                setBankTransactions(recon.transactions.map(t => ({
+                                  transactionDate: t.transactionDate,
+                                  description: t.description,
+                                  referenceNo: t.referenceNo,
+                                  debit: t.debit,
+                                  credit: t.credit,
+                                  isMatched: t.isMatched,
+                                })));
+                                setReconciliationDialogOpen(true);
+                              }}>
+                                View
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
-                </div>
 
-                {/* Pagination */}
-                {totalReconciliationPages > 1 && (
                   <div className="flex items-center justify-between">
                     <div className="text-sm text-muted-foreground">
-                      Page {reconciliationPage} of {totalReconciliationPages}
+                      Page {reconPage} of {reconTotalPages}
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-2">
                       <Button
-                        variant="outline"
                         size="sm"
-                        disabled={reconciliationPage === 1}
-                        onClick={() => setReconciliationPage(reconciliationPage - 1)}
+                        variant="outline"
+                        onClick={() => setReconPage(p => Math.max(1, p - 1))}
+                        disabled={reconPage === 1}
                       >
                         Previous
                       </Button>
                       <Button
-                        variant="outline"
                         size="sm"
-                        disabled={reconciliationPage === totalReconciliationPages}
-                        onClick={() => setReconciliationPage(reconciliationPage + 1)}
+                        variant="outline"
+                        onClick={() => setReconPage(p => Math.min(reconTotalPages, p + 1))}
+                        disabled={reconPage === reconTotalPages}
                       >
                         Next
                       </Button>
                     </div>
                   </div>
-                )}
+                </div>
+
+                <Dialog open={reconciliationDialogOpen} onOpenChange={setReconciliationDialogOpen}>
+                  <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>{editingReconciliation ? "Edit" : "Create"} Bank Reconciliation</DialogTitle>
+                      <DialogDescription>Match bank statement with accounting records</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label>Bank Account</Label>
+                          <Select value={newReconciliation.accountId} onValueChange={(value) => setNewReconciliation({ ...newReconciliation, accountId: value })}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select account" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {accounts.filter(a => a.type === "asset" && a.code.startsWith("1")).map((account) => (
+                                <SelectItem key={account.id} value={account.id}>{account.code} - {account.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label>Statement Date</Label>
+                          <Input type="date" value={newReconciliation.statementDate} onChange={(e) => setNewReconciliation({ ...newReconciliation, statementDate: e.target.value })} />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label>Statement Balance</Label>
+                          <Input type="number" step="0.01" value={newReconciliation.statementBalance} onChange={(e) => setNewReconciliation({ ...newReconciliation, statementBalance: parseFloat(e.target.value) || 0 })} />
+                        </div>
+                        <div>
+                          <Label>Book Balance</Label>
+                          <Input type="number" step="0.01" value={newReconciliation.bookBalance} onChange={(e) => setNewReconciliation({ ...newReconciliation, bookBalance: parseFloat(e.target.value) || 0 })} />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <Label>Bank Statement Transactions</Label>
+                          <Button size="sm" variant="outline" onClick={() => setBankTransactions([...bankTransactions, { transactionDate: new Date().toISOString().split("T")[0], description: "", referenceNo: "", debit: 0, credit: 0, isMatched: false }])}>
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add Transaction
+                          </Button>
+                        </div>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Date</TableHead>
+                              <TableHead>Description</TableHead>
+                              <TableHead>Ref #</TableHead>
+                              <TableHead>Debit</TableHead>
+                              <TableHead>Credit</TableHead>
+                              <TableHead></TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {bankTransactions.map((trans, index) => (
+                              <TableRow key={index}>
+                                <TableCell>
+                                  <Input type="date" value={trans.transactionDate} onChange={(e) => {
+                                    const updated = [...bankTransactions];
+                                    updated[index].transactionDate = e.target.value;
+                                    setBankTransactions(updated);
+                                  }} />
+                                </TableCell>
+                                <TableCell>
+                                  <Input value={trans.description} onChange={(e) => {
+                                    const updated = [...bankTransactions];
+                                    updated[index].description = e.target.value;
+                                    setBankTransactions(updated);
+                                  }} />
+                                </TableCell>
+                                <TableCell>
+                                  <Input value={trans.referenceNo} onChange={(e) => {
+                                    const updated = [...bankTransactions];
+                                    updated[index].referenceNo = e.target.value;
+                                    setBankTransactions(updated);
+                                  }} />
+                                </TableCell>
+                                <TableCell>
+                                  <Input type="number" step="0.01" value={trans.debit || ""} onChange={(e) => {
+                                    const updated = [...bankTransactions];
+                                    updated[index].debit = parseFloat(e.target.value) || 0;
+                                    setBankTransactions(updated);
+                                  }} />
+                                </TableCell>
+                                <TableCell>
+                                  <Input type="number" step="0.01" value={trans.credit || ""} onChange={(e) => {
+                                    const updated = [...bankTransactions];
+                                    updated[index].credit = parseFloat(e.target.value) || 0;
+                                    setBankTransactions(updated);
+                                  }} />
+                                </TableCell>
+                                <TableCell>
+                                  <Button size="icon" variant="ghost" onClick={() => setBankTransactions(bankTransactions.filter((_, i) => i !== index))}>
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setReconciliationDialogOpen(false)}>Cancel</Button>
+                      <Button onClick={handleSaveReconciliation}>Save</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* PERIOD COMPARISON TAB */}
-          <TabsContent value="period-comparison" className="space-y-6">
+          <TabsContent value="period-comparison">
             <Card>
               <CardHeader>
-                <CardTitle>Period Comparison</CardTitle>
-                <CardDescription>
-                  Compare financial performance across different time periods
-                </CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Period Comparison</CardTitle>
+                    <CardDescription>Compare financial statements across different time periods</CardDescription>
+                  </div>
+                  <Button onClick={loadPeriodComparison}>Generate Comparison</Button>
+                </div>
               </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Period Selection */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-muted/50 rounded-lg">
-                  {comparisonPeriods.map((period, index) => (
-                    <div key={index} className="space-y-4 p-4 bg-background rounded-lg border">
-                      <h3 className="font-semibold mb-4">Period {index + 1}</h3>
-                      <div className="space-y-2">
-                        <Label>Label</Label>
-                        <Input
-                          placeholder="e.g., Current Year"
-                          value={period.label}
-                          onChange={(e) => {
-                            const updated = [...comparisonPeriods];
-                            updated[index].label = e.target.value;
-                            setComparisonPeriods(updated);
-                          }}
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>Start Date</Label>
-                          <Input
-                            type="date"
-                            value={period.startDate}
-                            onChange={(e) => {
-                              const updated = [...comparisonPeriods];
-                              updated[index].startDate = e.target.value;
-                              setComparisonPeriods(updated);
-                            }}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>End Date</Label>
-                          <Input
-                            type="date"
-                            value={period.endDate}
-                            onChange={(e) => {
-                              const updated = [...comparisonPeriods];
-                              updated[index].endDate = e.target.value;
-                              setComparisonPeriods(updated);
-                            }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              <CardContent>
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    {comparisonPeriods.map((period, index) => (
+                      <Card key={index}>
+                        <CardHeader>
+                          <CardTitle className="text-sm">Period {index + 1}</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                          <div>
+                            <Label className="text-xs">Label</Label>
+                            <Input
+                              value={period.label}
+                              onChange={(e) => {
+                                const updated = [...comparisonPeriods];
+                                updated[index].label = e.target.value;
+                                setComparisonPeriods(updated);
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">Start Date</Label>
+                            <Input
+                              type="date"
+                              value={period.startDate}
+                              onChange={(e) => {
+                                const updated = [...comparisonPeriods];
+                                updated[index].startDate = e.target.value;
+                                setComparisonPeriods(updated);
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">End Date</Label>
+                            <Input
+                              type="date"
+                              value={period.endDate}
+                              onChange={(e) => {
+                                const updated = [...comparisonPeriods];
+                                updated[index].endDate = e.target.value;
+                                setComparisonPeriods(updated);
+                              }}
+                            />
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
 
-                <div className="flex justify-center">
-                  <Button onClick={loadPeriodComparison} size="lg">
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Generate Comparison
-                  </Button>
-                </div>
-
-                {/* Charts */}
-                {comparisonCharts && (
-                  <div className="space-y-6">
-                    <div className="grid grid-cols-1 gap-6">
-                      {/* Revenue Comparison Chart */}
+                  {comparisonCharts && (
+                    <div className="space-y-6">
                       <Card>
                         <CardHeader>
                           <CardTitle>Revenue & Expense Comparison</CardTitle>
-                          <CardDescription>Track revenue growth and cost trends</CardDescription>
                         </CardHeader>
                         <CardContent>
                           <ResponsiveContainer width="100%" height={300}>
-                            <BarChart data={comparisonCharts.revenueComparison}>
+                            <BarChart data={comparisonCharts.revenueData}>
                               <CartesianGrid strokeDasharray="3 3" />
                               <XAxis dataKey="period" />
                               <YAxis />
-                              <Tooltip
-                                formatter={(value: any) => formatCurrency(value)}
-                                contentStyle={{
-                                  backgroundColor: "hsl(var(--background))",
-                                  border: "1px solid hsl(var(--border))",
-                                  borderRadius: "8px",
-                                }}
-                              />
+                              <Tooltip formatter={(value) => formatCurrency(Number(value))} />
                               <Legend />
                               <Bar dataKey="revenue" fill="hsl(var(--primary))" name="Revenue" />
-                              <Bar dataKey="cogs" fill="hsl(142 76% 36%)" name="COGS" />
-                              <Bar dataKey="expenses" fill="hsl(var(--destructive))" name="Expenses" />
+                              <Bar dataKey="cogs" fill="hsl(var(--destructive))" name="COGS" />
+                              <Bar dataKey="expenses" fill="hsl(var(--muted))" name="Expenses" />
                             </BarChart>
                           </ResponsiveContainer>
                         </CardContent>
                       </Card>
 
-                      {/* Profit Margin Trend */}
                       <Card>
                         <CardHeader>
                           <CardTitle>Profit Margin Trend</CardTitle>
-                          <CardDescription>Monitor profitability over time</CardDescription>
                         </CardHeader>
                         <CardContent>
                           <ResponsiveContainer width="100%" height={300}>
-                            <LineChart data={comparisonCharts.profitMarginTrend}>
+                            <LineChart data={comparisonCharts.marginData}>
                               <CartesianGrid strokeDasharray="3 3" />
                               <XAxis dataKey="period" />
-                              <YAxis tickFormatter={(value) => `${value}%`} />
-                              <Tooltip
-                                formatter={(value: any) => `${value.toFixed(2)}%`}
-                                contentStyle={{
-                                  backgroundColor: "hsl(var(--background))",
-                                  border: "1px solid hsl(var(--border))",
-                                  borderRadius: "8px",
-                                }}
-                              />
+                              <YAxis />
+                              <Tooltip formatter={(value) => `${value}%`} />
                               <Legend />
-                              <Line
-                                type="monotone"
-                                dataKey="grossMargin"
-                                stroke="hsl(var(--primary))"
-                                strokeWidth={2}
-                                name="Gross Margin %"
-                              />
-                              <Line
-                                type="monotone"
-                                dataKey="netMargin"
-                                stroke="hsl(142 76% 36%)"
-                                strokeWidth={2}
-                                name="Net Margin %"
-                              />
+                              <Line type="monotone" dataKey="grossMargin" stroke="hsl(var(--primary))" name="Gross Margin %" />
+                              <Line type="monotone" dataKey="netMargin" stroke="hsl(var(--chart-2))" name="Net Margin %" />
                             </LineChart>
                           </ResponsiveContainer>
                         </CardContent>
                       </Card>
 
-                      {/* Asset Growth */}
                       <Card>
                         <CardHeader>
                           <CardTitle>Asset Growth</CardTitle>
-                          <CardDescription>Track company asset expansion</CardDescription>
                         </CardHeader>
                         <CardContent>
                           <ResponsiveContainer width="100%" height={300}>
-                            <BarChart data={comparisonCharts.assetGrowth}>
+                            <BarChart data={comparisonCharts.assetData}>
                               <CartesianGrid strokeDasharray="3 3" />
                               <XAxis dataKey="period" />
                               <YAxis />
-                              <Tooltip
-                                formatter={(value: any) => formatCurrency(value)}
-                                contentStyle={{
-                                  backgroundColor: "hsl(var(--background))",
-                                  border: "1px solid hsl(var(--border))",
-                                  borderRadius: "8px",
-                                }}
-                              />
+                              <Tooltip formatter={(value) => formatCurrency(Number(value))} />
                               <Legend />
-                              <Bar dataKey="currentAssets" fill="hsl(var(--primary))" name="Current Assets" />
-                              <Bar dataKey="nonCurrentAssets" fill="hsl(142 76% 36%)" name="Non-Current Assets" />
+                              <Bar dataKey="currentAssets" stackId="a" fill="hsl(var(--chart-3))" name="Current Assets" />
+                              <Bar dataKey="nonCurrentAssets" stackId="a" fill="hsl(var(--chart-4))" name="Non-Current Assets" />
                             </BarChart>
                           </ResponsiveContainer>
                         </CardContent>
                       </Card>
                     </div>
-
-                    {/* Summary Table */}
-                    {comparisonData && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>Detailed Comparison</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="space-y-6">
-                            {/* Profit & Loss Comparison */}
-                            <div>
-                              <h3 className="font-semibold mb-4">Profit & Loss</h3>
-                              <div className="border rounded-lg overflow-hidden">
-                                <Table>
-                                  <TableHeader>
-                                    <TableRow>
-                                      <TableHead>Category</TableHead>
-                                      {comparisonPeriods.map((period) => (
-                                        <TableHead key={period.label} className="text-right">
-                                          {period.label}
-                                        </TableHead>
-                                      ))}
-                                      <TableHead className="text-right">Variance</TableHead>
-                                    </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                    <TableRow>
-                                      <TableCell className="font-medium">Total Revenue</TableCell>
-                                      {comparisonPeriods.map((period) => (
-                                        <TableCell key={period.label} className="text-right">
-                                          {formatCurrency(comparisonData.profitAndLoss[period.label]?.totalRevenue || 0)}
-                                        </TableCell>
-                                      ))}
-                                      <TableCell className="text-right">
-                                        {comparisonPeriods.length === 2 && (
-                                          <span
-                                            className={
-                                              (comparisonData.profitAndLoss[comparisonPeriods[0].label]?.totalRevenue || 0) >
-                                              (comparisonData.profitAndLoss[comparisonPeriods[1].label]?.totalRevenue || 0)
-                                                ? "text-green-600"
-                                                : "text-destructive"
-                                            }
-                                          >
-                                            {formatCurrency(
-                                              (comparisonData.profitAndLoss[comparisonPeriods[0].label]?.totalRevenue || 0) -
-                                                (comparisonData.profitAndLoss[comparisonPeriods[1].label]?.totalRevenue || 0)
-                                            )}
-                                          </span>
-                                        )}
-                                      </TableCell>
-                                    </TableRow>
-                                    <TableRow>
-                                      <TableCell className="font-medium">Total COGS</TableCell>
-                                      {comparisonPeriods.map((period) => (
-                                        <TableCell key={period.label} className="text-right">
-                                          {formatCurrency(comparisonData.profitAndLoss[period.label]?.totalCOGS || 0)}
-                                        </TableCell>
-                                      ))}
-                                      <TableCell className="text-right">
-                                        {comparisonPeriods.length === 2 && (
-                                          <span
-                                            className={
-                                              (comparisonData.profitAndLoss[comparisonPeriods[0].label]?.totalCOGS || 0) <
-                                              (comparisonData.profitAndLoss[comparisonPeriods[1].label]?.totalCOGS || 0)
-                                                ? "text-green-600"
-                                                : "text-destructive"
-                                            }
-                                          >
-                                            {formatCurrency(
-                                              (comparisonData.profitAndLoss[comparisonPeriods[0].label]?.totalCOGS || 0) -
-                                                (comparisonData.profitAndLoss[comparisonPeriods[1].label]?.totalCOGS || 0)
-                                            )}
-                                          </span>
-                                        )}
-                                      </TableCell>
-                                    </TableRow>
-                                    <TableRow>
-                                      <TableCell className="font-medium">Gross Profit</TableCell>
-                                      {comparisonPeriods.map((period) => (
-                                        <TableCell key={period.label} className="text-right font-semibold">
-                                          {formatCurrency(comparisonData.profitAndLoss[period.label]?.grossProfit || 0)}
-                                        </TableCell>
-                                      ))}
-                                      <TableCell className="text-right font-semibold">
-                                        {comparisonPeriods.length === 2 && (
-                                          <span
-                                            className={
-                                              (comparisonData.profitAndLoss[comparisonPeriods[0].label]?.grossProfit || 0) >
-                                              (comparisonData.profitAndLoss[comparisonPeriods[1].label]?.grossProfit || 0)
-                                                ? "text-green-600"
-                                                : "text-destructive"
-                                            }
-                                          >
-                                            {formatCurrency(
-                                              (comparisonData.profitAndLoss[comparisonPeriods[0].label]?.grossProfit || 0) -
-                                                (comparisonData.profitAndLoss[comparisonPeriods[1].label]?.grossProfit || 0)
-                                            )}
-                                          </span>
-                                        )}
-                                      </TableCell>
-                                    </TableRow>
-                                    <TableRow>
-                                      <TableCell className="font-medium">Net Income</TableCell>
-                                      {comparisonPeriods.map((period) => (
-                                        <TableCell key={period.label} className="text-right font-semibold">
-                                          {formatCurrency(comparisonData.profitAndLoss[period.label]?.netIncome || 0)}
-                                        </TableCell>
-                                      ))}
-                                      <TableCell className="text-right font-semibold">
-                                        {comparisonPeriods.length === 2 && (
-                                          <span
-                                            className={
-                                              (comparisonData.profitAndLoss[comparisonPeriods[0].label]?.netIncome || 0) >
-                                              (comparisonData.profitAndLoss[comparisonPeriods[1].label]?.netIncome || 0)
-                                                ? "text-green-600"
-                                                : "text-destructive"
-                                            }
-                                          >
-                                            {formatCurrency(
-                                              (comparisonData.profitAndLoss[comparisonPeriods[0].label]?.netIncome || 0) -
-                                                (comparisonData.profitAndLoss[comparisonPeriods[1].label]?.netIncome || 0)
-                                            )}
-                                          </span>
-                                        )}
-                                      </TableCell>
-                                    </TableRow>
-                                  </TableBody>
-                                </Table>
-                              </div>
-                            </div>
-
-                            {/* Balance Sheet Comparison */}
-                            <div>
-                              <h3 className="font-semibold mb-4">Balance Sheet</h3>
-                              <div className="border rounded-lg overflow-hidden">
-                                <Table>
-                                  <TableHeader>
-                                    <TableRow>
-                                      <TableHead>Category</TableHead>
-                                      {comparisonPeriods.map((period) => (
-                                        <TableHead key={period.label} className="text-right">
-                                          {period.label}
-                                        </TableHead>
-                                      ))}
-                                      <TableHead className="text-right">Variance</TableHead>
-                                    </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                    <TableRow>
-                                      <TableCell className="font-medium">Total Assets</TableCell>
-                                      {comparisonPeriods.map((period) => (
-                                        <TableCell key={period.label} className="text-right">
-                                          {formatCurrency(comparisonData.balanceSheet[period.label]?.totalAssets || 0)}
-                                        </TableCell>
-                                      ))}
-                                      <TableCell className="text-right">
-                                        {comparisonPeriods.length === 2 && (
-                                          <span
-                                            className={
-                                              (comparisonData.balanceSheet[comparisonPeriods[0].label]?.totalAssets || 0) >
-                                              (comparisonData.balanceSheet[comparisonPeriods[1].label]?.totalAssets || 0)
-                                                ? "text-green-600"
-                                                : "text-destructive"
-                                            }
-                                          >
-                                            {formatCurrency(
-                                              (comparisonData.balanceSheet[comparisonPeriods[0].label]?.totalAssets || 0) -
-                                                (comparisonData.balanceSheet[comparisonPeriods[1].label]?.totalAssets || 0)
-                                            )}
-                                          </span>
-                                        )}
-                                      </TableCell>
-                                    </TableRow>
-                                    <TableRow>
-                                      <TableCell className="font-medium">Total Liabilities</TableCell>
-                                      {comparisonPeriods.map((period) => (
-                                        <TableCell key={period.label} className="text-right">
-                                          {formatCurrency(comparisonData.balanceSheet[period.label]?.totalLiabilities || 0)}
-                                        </TableCell>
-                                      ))}
-                                      <TableCell className="text-right">
-                                        {comparisonPeriods.length === 2 && (
-                                          <span
-                                            className={
-                                              (comparisonData.balanceSheet[comparisonPeriods[0].label]?.totalLiabilities || 0) <
-                                              (comparisonData.balanceSheet[comparisonPeriods[1].label]?.totalLiabilities || 0)
-                                                ? "text-green-600"
-                                                : "text-destructive"
-                                            }
-                                          >
-                                            {formatCurrency(
-                                              (comparisonData.balanceSheet[comparisonPeriods[0].label]?.totalLiabilities || 0) -
-                                                (comparisonData.balanceSheet[comparisonPeriods[1].label]?.totalLiabilities || 0)
-                                            )}
-                                          </span>
-                                        )}
-                                      </TableCell>
-                                    </TableRow>
-                                    <TableRow>
-                                      <TableCell className="font-medium">Total Equity</TableCell>
-                                      {comparisonPeriods.map((period) => (
-                                        <TableCell key={period.label} className="text-right font-semibold">
-                                          {formatCurrency(comparisonData.balanceSheet[period.label]?.totalEquity || 0)}
-                                        </TableCell>
-                                      ))}
-                                      <TableCell className="text-right font-semibold">
-                                        {comparisonPeriods.length === 2 && (
-                                          <span
-                                            className={
-                                              (comparisonData.balanceSheet[comparisonPeriods[0].label]?.totalEquity || 0) >
-                                              (comparisonData.balanceSheet[comparisonPeriods[1].label]?.totalEquity || 0)
-                                                ? "text-green-600"
-                                                : "text-destructive"
-                                            }
-                                          >
-                                            {formatCurrency(
-                                              (comparisonData.balanceSheet[comparisonPeriods[0].label]?.totalEquity || 0) -
-                                                (comparisonData.balanceSheet[comparisonPeriods[1].label]?.totalEquity || 0)
-                                            )}
-                                          </span>
-                                        )}
-                                      </TableCell>
-                                    </TableRow>
-                                  </TableBody>
-                                </Table>
-                              </div>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {!comparisonData && (
-                      <div className="text-center py-12 text-muted-foreground">
-                        Select periods above and click "Generate Comparison" to view charts and analysis
-                      </div>
-                    )}
-                  </div>
-                )}
+                  )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
