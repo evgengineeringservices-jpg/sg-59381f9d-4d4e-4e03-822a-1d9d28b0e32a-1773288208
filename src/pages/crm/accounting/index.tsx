@@ -163,12 +163,12 @@ export default function AccountingPage() {
     declarationDate: new Date().toISOString().split("T")[0],
     recordDate: new Date().toISOString().split("T")[0],
     paymentDate: new Date().toISOString().split("T")[0],
-    dividendType: "cash" as "cash" | "stock",
+    dividendType: "cash" as "cash" | "stock" | "property",
     totalAmount: 0,
     perShareAmount: 0,
     fiscalYear: new Date().getFullYear(),
     fiscalQuarter: 1,
-    status: "declared" as "declared" | "approved" | "paid",
+    status: "declared" as "declared" | "approved" | "paid" | "cancelled",
     approvedBy: "",
     paidBy: "",
     notes: "",
@@ -178,7 +178,7 @@ export default function AccountingPage() {
   const [equityDialogOpen, setEquityDialogOpen] = useState(false);
   const [editingEquity, setEditingEquity] = useState<EquityAccount | null>(null);
   const [newEquity, setNewEquity] = useState({
-    accountType: "capital_stock" as "capital_stock" | "retained_earnings" | "additional_paid_in_capital" | "treasury_stock" | "other_comprehensive_income",
+    accountType: "capital_stock" as "capital_stock" | "retained_earnings" | "additional_paid_in_capital" | "treasury_stock" | "other_equity",
     name: "",
     balance: 0,
     description: "",
@@ -454,11 +454,18 @@ export default function AccountingPage() {
 
   async function handleSaveShareholder() {
     try {
+      const payload = {
+        ...newShareholder,
+        certificateNumbers: newShareholder.certificateNumbers 
+          ? newShareholder.certificateNumbers.split(',').map(s => s.trim()).filter(Boolean) 
+          : []
+      };
+
       if (editingShareholder) {
-        await updateShareholder(editingShareholder.id, newShareholder);
+        await updateShareholder(editingShareholder.id, payload);
         toast({ title: "Success", description: "Shareholder updated successfully" });
       } else {
-        await createShareholder(newShareholder);
+        await createShareholder(payload);
         toast({ title: "Success", description: "Shareholder created successfully" });
       }
       setShareholderDialogOpen(false);
@@ -1843,7 +1850,7 @@ export default function AccountingPage() {
                                 parValue: shareholder.parValue,
                                 totalInvestment: shareholder.totalInvestment,
                                 percentageOwnership: shareholder.percentageOwnership,
-                                certificateNumbers: shareholder.certificateNumbers || "",
+                                certificateNumbers: shareholder.certificateNumbers ? shareholder.certificateNumbers.join(', ') : "",
                                 status: shareholder.status,
                                 dateJoined: shareholder.dateJoined,
                                 notes: shareholder.notes || "",
@@ -2042,6 +2049,7 @@ export default function AccountingPage() {
                             <SelectContent>
                               <SelectItem value="cash">Cash Dividend</SelectItem>
                               <SelectItem value="stock">Stock Dividend</SelectItem>
+                              <SelectItem value="property">Property Dividend</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -2053,6 +2061,7 @@ export default function AccountingPage() {
                               <SelectItem value="declared">Declared</SelectItem>
                               <SelectItem value="approved">Approved</SelectItem>
                               <SelectItem value="paid">Paid</SelectItem>
+                              <SelectItem value="cancelled">Cancelled</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -2193,7 +2202,7 @@ export default function AccountingPage() {
                             <SelectItem value="retained_earnings">Retained Earnings</SelectItem>
                             <SelectItem value="additional_paid_in_capital">Additional Paid-in Capital</SelectItem>
                             <SelectItem value="treasury_stock">Treasury Stock</SelectItem>
-                            <SelectItem value="other_comprehensive_income">Other Comprehensive Income</SelectItem>
+                            <SelectItem value="other_equity">Other Equity</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
