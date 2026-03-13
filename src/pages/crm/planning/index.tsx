@@ -31,9 +31,10 @@ import {
   deletePlanningPhase,
   getBOQItems
 } from "@/services/crmService";
-import { Plus, Edit2, Trash2, Calendar, TrendingUp, GanttChart as GanttIcon, Sparkles, Loader2, RefreshCw, Download, FileText, FileSpreadsheet } from "lucide-react";
+import { Plus, Edit2, Trash2, Calendar, TrendingUp, Sparkles, Loader2, RefreshCw, Download, FileText, FileSpreadsheet } from "lucide-react";
+import { GanttChart as GanttIcon } from "lucide-react";
 import { GanttChart } from "@/components/planning/GanttChart";
-import type { Project, PlanningPhase, Role } from "@/types";
+import type { Project, PlanningPhase, Role, PlanningPhaseStatus } from "@/types";
 
 export default function PlanningPage() {
   const { toast } = useToast();
@@ -130,7 +131,12 @@ export default function PlanningPage() {
   async function handleSubmit() {
     try {
       const phaseData = {
-        ...formData,
+        projectId: selectedProject,
+        name: formData.name,
+        startDate: new Date(formData.startDate).toISOString(),
+        endDate: new Date(formData.endDate).toISOString(),
+        status: (formData.status || "not-started") as PlanningPhaseStatus,
+        progress: formData.progress || 0,
         dependencies: formData.dependencies ? formData.dependencies.split(",").map(d => d.trim()).filter(Boolean) : [],
         assignedRole: formData.assignedRole as any,
       };
@@ -400,7 +406,7 @@ export default function PlanningPage() {
           name: phaseName,
           startDate: currentStartDate.toISOString(),
           endDate: endDate.toISOString(),
-          status: "not_started" as const,
+          status: "not-started" as PlanningPhaseStatus,
           progress: 0,
           assignedRole: assignedRole as Role,
           dependencies: previousPhase ? [previousPhase] : [],

@@ -33,6 +33,7 @@ import {
   Menu,
   X,
   TrendingUp,
+  Landmark,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -64,6 +65,7 @@ const navigationGroups = [
       { label: "Progress Reports", href: "/crm/reports", icon: ClipboardCheck },
       { label: "Weekly Logistics", href: "/crm/logistics", icon: Truck },
       { label: "Billing", href: "/crm/billing", icon: DollarSign },
+      { label: "Accounting", href: "/crm/accounting", icon: Landmark, roles: ["super_admin", "owner", "contractor_admin"] },
       { label: "Documents", href: "/crm/documents", icon: FileText },
       { label: "Drawings", href: "/crm/drawings", icon: FileImage },
     ],

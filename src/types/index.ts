@@ -123,6 +123,44 @@ export type DPWHUnit =
   | "man_day"
   | "ls";
 
+export type PlanningPhaseStatus = "not-started" | "in-progress" | "completed" | "delayed";
+
+export type AccountType = "asset" | "liability" | "equity" | "revenue" | "expense";
+
+export interface Account {
+  id: string;
+  code: string;
+  name: string;
+  type: AccountType;
+  category: string;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface JournalEntry {
+  id: string;
+  projectId: string | null;
+  date: string;
+  referenceNo: string;
+  description: string;
+  status: "draft" | "posted";
+  createdAt: string;
+  updatedAt: string;
+  lines?: JournalLine[];
+}
+
+export interface JournalLine {
+  id: string;
+  entryId: string;
+  accountId: string;
+  description: string | null;
+  debit: number;
+  credit: number;
+  createdAt: string;
+  account?: Account;
+}
+
 // Database entities
 export interface Profile {
   id: string;
@@ -207,7 +245,7 @@ export interface PlanningPhase {
   name: string;
   startDate: string;
   endDate: string;
-  status: "not_started" | "in_progress" | "completed" | "delayed";
+  status: PlanningPhaseStatus;
   progress: number;
   dependencies: string[];
   assignedRole: Role | null;

@@ -63,13 +63,18 @@ export function GanttChart({ phases, onPhaseClick, onPhaseDateChange }: GanttCha
   };
 
   // Status colors
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "completed": return "bg-green-500";
-      case "in_progress": return "bg-blue-500";
-      case "delayed": return "bg-red-500";
-      default: return "bg-gray-400";
-    }
+  const getStatusColor = (status: string, progress: number) => {
+    if (status === "completed") return "bg-green-500";
+    if (status === "in-progress") return "bg-blue-500";
+    if (status === "delayed") return "bg-red-500";
+    return "bg-gray-400"; // not-started
+  };
+
+  const getStatusBadgeVariant = (status: string) => {
+    if (status === "completed") return "default";
+    if (status === "in-progress") return "secondary";
+    if (status === "delayed") return "destructive";
+    return "outline"; // not-started
   };
 
   // Handle drag operations
@@ -240,7 +245,7 @@ export function GanttChart({ phases, onPhaseClick, onPhaseDateChange }: GanttCha
                   <div className="w-[300px] shrink-0 p-3 border-r space-y-1">
                     <div className="font-medium text-sm truncate">{phase.name}</div>
                     <div className="flex items-center gap-2 text-xs">
-                      <Badge variant={phase.status === "completed" ? "default" : "secondary"} className="text-[10px]">
+                      <Badge variant={getStatusBadgeVariant(phase.status)} className="text-[10px]">
                         {phase.status.replace("_", " ")}
                       </Badge>
                       {phase.isMilestone && (
@@ -269,7 +274,7 @@ export function GanttChart({ phases, onPhaseClick, onPhaseDateChange }: GanttCha
                     <div
                       className={cn(
                         "absolute h-8 rounded-md top-1/2 -translate-y-1/2 cursor-pointer transition-all",
-                        getStatusColor(phase.status),
+                        getStatusColor(phase.status, phase.progress),
                         "hover:brightness-110 shadow-sm",
                         draggingPhase?.phase.id === phase.id && "opacity-70"
                       )}
@@ -320,7 +325,7 @@ export function GanttChart({ phases, onPhaseClick, onPhaseDateChange }: GanttCha
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-4 text-sm">
+      <div className="flex items-center gap-6 text-sm">
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded bg-gray-400" />
           <span>Not Started</span>
