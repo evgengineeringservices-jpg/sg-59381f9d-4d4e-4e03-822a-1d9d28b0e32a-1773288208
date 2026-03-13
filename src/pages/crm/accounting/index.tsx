@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { CRMLayout } from "@/components/layout/CRMLayout";
+import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import type {
@@ -56,6 +58,7 @@ import {
 
 export default function AccountingPage() {
   const { toast } = useToast();
+  const { user, loading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState("journal");
   const [loading, setLoading] = useState(true);
   
@@ -91,6 +94,7 @@ export default function AccountingPage() {
     startDate: new Date().toISOString().split("T")[0],
     endDate: "",
     projectId: "",
+    isActive: true,
   });
   const [recurringLines, setRecurringLines] = useState<Omit<RecurringJournalLine, "id" | "recurringEntryId">[]>([]);
 
@@ -103,6 +107,8 @@ export default function AccountingPage() {
     statementDate: new Date().toISOString().split("T")[0],
     statementBalance: 0,
     bookBalance: 0,
+    reconciledBalance: 0,
+    status: "in_progress" as BankReconciliation["status"],
   });
   const [bankTransactions, setBankTransactions] = useState<Omit<BankTransaction, "id" | "reconciliationId" | "createdAt">[]>([]);
 
@@ -260,648 +266,31 @@ export default function AccountingPage() {
     setComparisonCharts(charts);
   }, [comparisonData]);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  async function loadData() {
-    try {
-      setLoading(true);
-      const [accs, jEs, projs] = await Promise.all([
-        getAccounts(),
-        getJournalEntries(),
-        getProjects(),
-      ]);
-      setAccounts(accs);
-      setEntries(jEs);
-      setProjects(projs);
-    } catch (error) {
-      console.error("Error loading accounting data:", error);
-      toast({ title: "Error", description: "Failed to load accounting data", variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
+  // Show loading only if still checking auth or loading initial data
+  if (authLoading) {
+    return (
+      <CRMLayout>
+        <div className="flex items-center justify-center h-96">
+          <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+        </div>
+      </CRMLayout>
+    );
   }
 
-  const handleAddLine = () => {
-    setNewLines([...newLines, { accountId: "", description: "", debit: 0, credit: 0 }]);
-  };
-
-  const handleRemoveLine = (index: number) => {
-    setNewLines(newLines.filter((_, i) => i !== index));
-  };
-
-  const handleLineChange = (index: number, field: string, value: string | number) => {
-    const updated = [...newLines];
-    (updated[index] as any)[field] = value;
-    
-    // Auto-balance logic helper
-    if (field === 'debit' && Number(value) > 0) updated[index].credit = 0;
-    if (field === 'credit' && Number(value) > 0) updated[index].debit = 0;
-    
-    setNewLines(updated);
-  };
-
-  const totalDebit = newLines.reduce((sum, line) => sum + (Number(line.debit) || 0), 0);
-  const totalCredit = newLines.reduce((sum, line) => sum + (Number(line.credit) || 0), 0);
-  const isBalanced = totalDebit > 0 && totalDebit === totalCredit;
-
-  const handleSaveEntry = async (postImmediately: boolean) => {
-    if (!isBalanced) {
-      toast({ title: "Validation Error", description: "Debits must equal credits.", variant: "destructive" });
-      return;
-    }
-    if (newLines.some(l => !l.accountId)) {
-      toast({ title: "Validation Error", description: "All lines must have an account selected.", variant: "destructive" });
-      return;
-    }
-
-    try {
-      await createJournalEntry(
-        {
-          date: newEntry.date,
-          referenceNo: newEntry.referenceNo || `JE-${Date.now().toString().slice(-6)}`,
-          description: newEntry.description,
-          projectId: newEntry.projectId === "none" ? null : newEntry.projectId,
-          status: postImmediately ? "posted" : "draft"
-        },
-        newLines.map(l => ({ ...l, debit: Number(l.debit), credit: Number(l.credit) }))
-      );
-      
-      toast({ title: "Success", description: `Journal entry ${postImmediately ? "posted" : "saved as draft"}.` });
-      setDialogOpen(false);
-      setNewEntry({ date: new Date().toISOString().split("T")[0], referenceNo: "", description: "", projectId: "none" });
-      setNewLines([{ accountId: "", description: "", debit: 0, credit: 0 }, { accountId: "", description: "", debit: 0, credit: 0 }]);
-      loadData();
-    } catch (error) {
-      console.error(error);
-      toast({ title: "Error", description: "Failed to save journal entry", variant: "destructive" });
-    }
-  };
-
-  const handlePostEntry = async (id: string) => {
-    try {
-      await postJournalEntry(id);
-      toast({ title: "Success", description: "Entry posted successfully." });
-      loadData();
-    } catch (error) {
-      console.error(error);
-      toast({ title: "Error", description: "Failed to post entry", variant: "destructive" });
-    }
-  };
-
-  // --- Financial Statements Calculations ---
-  const statements = useMemo(() => {
-    const balances: Record<string, number> = {};
-    
-    // Only use posted entries
-    const postedEntries = entries.filter(e => e.status === "posted");
-    
-    // Calculate balances per account
-    postedEntries.forEach(entry => {
-      entry.lines?.forEach(line => {
-        if (!balances[line.accountId]) balances[line.accountId] = 0;
-        
-        const account = accounts.find(a => a.id === line.accountId);
-        if (!account) return;
-        
-        // Asset/Expense: Debit +, Credit -
-        // Liab/Equity/Revenue: Credit +, Debit -
-        if (['asset', 'expense'].includes(account.type)) {
-          balances[line.accountId] += (line.debit - line.credit);
-        } else {
-          balances[line.accountId] += (line.credit - line.debit);
-        }
-      });
-    });
-
-    let revenue = 0, directCosts = 0, overhead = 0;
-    let assets = 0, liabilities = 0, equity = 0;
-
-    accounts.forEach(acc => {
-      const bal = balances[acc.id] || 0;
-      if (acc.type === 'revenue') revenue += bal;
-      if (acc.type === 'expense' && acc.category.includes('Direct')) directCosts += bal;
-      if (acc.type === 'expense' && acc.category.includes('Overhead')) overhead += bal;
-      
-      if (acc.type === 'asset') assets += bal;
-      if (acc.type === 'liability') liabilities += bal;
-      if (acc.type === 'equity') equity += bal;
-    });
-
-    const grossProfit = revenue - directCosts;
-    const netIncome = grossProfit - overhead;
-
-    return {
-      balances,
-      revenue, directCosts, overhead, grossProfit, netIncome,
-      assets, liabilities, equity, totalEquity: equity + netIncome
-    };
-  }, [entries, accounts]);
-
-  const derivedProfitAndLoss = useMemo(() => {
-    const revenueAccs = accounts.filter(a => a.type === 'revenue' && (statements.balances[a.id] || 0) !== 0).map(a => ({ accountName: a.name, balance: statements.balances[a.id] || 0 }));
-    const cogsAccs = accounts.filter(a => a.type === 'expense' && a.category.includes('Direct') && (statements.balances[a.id] || 0) !== 0).map(a => ({ accountName: a.name, balance: statements.balances[a.id] || 0 }));
-    const expAccs = accounts.filter(a => a.type === 'expense' && a.category.includes('Overhead') && (statements.balances[a.id] || 0) !== 0).map(a => ({ accountName: a.name, balance: statements.balances[a.id] || 0 }));
-    
-    return {
-      revenue: revenueAccs,
-      totalRevenue: statements.revenue,
-      cogs: cogsAccs,
-      totalCogs: statements.directCosts,
-      grossProfit: statements.grossProfit,
-      grossMargin: statements.revenue > 0 ? (statements.grossProfit / statements.revenue) * 100 : 0,
-      expenses: expAccs,
-      totalExpenses: statements.overhead,
-      netIncome: statements.netIncome,
-      netMargin: statements.revenue > 0 ? (statements.netIncome / statements.revenue) * 100 : 0,
-    };
-  }, [statements, accounts]);
-
-  const derivedBalanceSheet = useMemo(() => {
-    const currentAssets = accounts.filter(a => a.type === 'asset' && !a.name.includes('Property') && !a.name.includes('Equipment') && !a.name.includes('Accumulated') && (statements.balances[a.id] || 0) !== 0).map(a => ({ accountName: a.name, balance: statements.balances[a.id] || 0 }));
-    const nonCurrentAssets = accounts.filter(a => a.type === 'asset' && (a.name.includes('Property') || a.name.includes('Equipment') || a.name.includes('Accumulated')) && (statements.balances[a.id] || 0) !== 0).map(a => ({ accountName: a.name, balance: statements.balances[a.id] || 0 }));
-    const currentLiabilities = accounts.filter(a => a.type === 'liability' && !a.name.includes('Long-term') && !a.name.includes('Retention') && (statements.balances[a.id] || 0) !== 0).map(a => ({ accountName: a.name, balance: statements.balances[a.id] || 0 }));
-    const longTermLiabilities = accounts.filter(a => a.type === 'liability' && (a.name.includes('Long-term') || a.name.includes('Retention')) && (statements.balances[a.id] || 0) !== 0).map(a => ({ accountName: a.name, balance: statements.balances[a.id] || 0 }));
-    const equityAccs = accounts.filter(a => a.type === 'equity' && !a.name.includes('Long-term') && !a.name.includes('Retention') && (statements.balances[a.id] || 0) !== 0).map(a => ({ accountName: a.name, balance: statements.balances[a.id] || 0 }));
-    
-    if (statements.netIncome !== 0) {
-       equityAccs.push({ accountName: "Current Year Earnings", balance: statements.netIncome });
-    }
-
-    return {
-      currentAssets,
-      totalCurrentAssets: currentAssets.reduce((sum, a) => sum + a.balance, 0),
-      nonCurrentAssets,
-      totalNonCurrentAssets: nonCurrentAssets.reduce((sum, a) => sum + a.balance, 0),
-      totalAssets: statements.assets,
-      currentLiabilities,
-      totalCurrentLiabilities: currentLiabilities.reduce((sum, a) => sum + a.balance, 0),
-      longTermLiabilities,
-      totalLongTermLiabilities: longTermLiabilities.reduce((sum, a) => sum + a.balance, 0),
-      totalLiabilities: statements.liabilities,
-      equity: equityAccs,
-      totalEquity: statements.totalEquity,
-      totalLiabilitiesAndEquity: statements.liabilities + statements.totalEquity
-    };
-  }, [statements, accounts]);
-
-  const formatCurrency = (val: number) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(val);
-
-  async function loadARAgingReport() {
-    try {
-      const data = await getAccountsReceivableAging();
-      setArAging(data);
-    } catch (error) {
-      console.error(error);
-      toast({ title: "Error", description: "Failed to load AR aging", variant: "destructive" });
-    }
+  // If not authenticated, CRMLayout will handle redirect
+  if (!user) {
+    return null;
   }
 
-  async function loadAPAgingReport() {
-    try {
-      const data = await getAccountsPayableAging();
-      setApAging(data);
-    } catch (error) {
-      console.error(error);
-      toast({ title: "Error", description: "Failed to load AP aging", variant: "destructive" });
-    }
+  if (loading) {
+    return (
+      <CRMLayout>
+        <div className="flex items-center justify-center h-96">
+          <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+        </div>
+      </CRMLayout>
+    );
   }
-
-  async function exportProfitAndLossToPDF() {
-    const { jsPDF } = await import("jspdf");
-    await import("jspdf-autotable");
-    const doc = new jsPDF() as any;
-    
-    doc.setFontSize(18);
-    doc.text("PROFIT & LOSS STATEMENT", 105, 20, { align: "center" });
-    doc.setFontSize(11);
-    doc.text("Construction Company", 105, 28, { align: "center" });
-    doc.text(`Period: ${format(new Date(), "MMMM d, yyyy")}`, 105, 35, { align: "center" });
-    
-    let yPos = 50;
-    doc.setFontSize(12);
-    doc.setFont(undefined, "bold");
-    doc.text("REVENUE", 14, yPos);
-    yPos += 7;
-    doc.setFontSize(10);
-    doc.setFont(undefined, "normal");
-    derivedProfitAndLoss.revenue.forEach((item: any) => {
-      doc.text(`  ${item.accountName}`, 14, yPos);
-      doc.text(formatCurrency(item.balance), 195, yPos, { align: "right" });
-      yPos += 6;
-    });
-    doc.setFont(undefined, "bold");
-    doc.text("TOTAL REVENUE", 14, yPos);
-    doc.text(formatCurrency(derivedProfitAndLoss.totalRevenue), 195, yPos, { align: "right" });
-    yPos += 10;
-    
-    doc.text("COST OF GOODS SOLD", 14, yPos);
-    yPos += 7;
-    doc.setFont(undefined, "normal");
-    derivedProfitAndLoss.cogs.forEach((item: any) => {
-      doc.text(`  ${item.accountName}`, 14, yPos);
-      doc.text(formatCurrency(item.balance), 195, yPos, { align: "right" });
-      yPos += 6;
-    });
-    doc.setFont(undefined, "bold");
-    doc.text("TOTAL COGS", 14, yPos);
-    doc.text(formatCurrency(derivedProfitAndLoss.totalCogs), 195, yPos, { align: "right" });
-    yPos += 8;
-    
-    doc.setFontSize(12);
-    doc.text("GROSS PROFIT", 14, yPos);
-    doc.text(formatCurrency(derivedProfitAndLoss.grossProfit), 195, yPos, { align: "right" });
-    yPos += 6;
-    doc.setFont(undefined, "normal");
-    doc.text(`GROSS MARGIN: ${derivedProfitAndLoss.grossMargin.toFixed(2)}%`, 14, yPos);
-    yPos += 10;
-    
-    doc.setFontSize(12);
-    doc.setFont(undefined, "bold");
-    doc.text("OPERATING EXPENSES", 14, yPos);
-    yPos += 7;
-    doc.setFontSize(10);
-    doc.setFont(undefined, "normal");
-    derivedProfitAndLoss.expenses.forEach((item: any) => {
-      doc.text(`  ${item.accountName}`, 14, yPos);
-      doc.text(formatCurrency(item.balance), 195, yPos, { align: "right" });
-      yPos += 6;
-    });
-    doc.setFont(undefined, "bold");
-    doc.text("TOTAL OPERATING EXPENSES", 14, yPos);
-    doc.text(formatCurrency(derivedProfitAndLoss.totalExpenses), 195, yPos, { align: "right" });
-    yPos += 10;
-    
-    doc.setFontSize(12);
-    doc.text("NET INCOME", 14, yPos);
-    doc.text(formatCurrency(derivedProfitAndLoss.netIncome), 195, yPos, { align: "right" });
-    yPos += 6;
-    doc.setFont(undefined, "normal");
-    doc.text(`NET MARGIN: ${derivedProfitAndLoss.netMargin.toFixed(2)}%`, 14, yPos);
-    
-    doc.save(`profit-and-loss-${format(new Date(), "yyyy-MM-dd")}.pdf`);
-    toast({ title: "Success", description: "Profit & Loss exported to PDF successfully." });
-  }
-
-  async function exportProfitAndLossToExcel() {
-    const XLSX = await import("xlsx");
-    const data = [
-      ["PROFIT & LOSS STATEMENT"],
-      ["Construction Company"],
-      [`Period: ${format(new Date(), "MMMM d, yyyy")}`],
-      [],
-      ["REVENUE"],
-      ...derivedProfitAndLoss.revenue.map((item: any) => [`  ${item.accountName}`, item.balance]),
-      ["TOTAL REVENUE", derivedProfitAndLoss.totalRevenue],
-      [],
-      ["COST OF GOODS SOLD"],
-      ...derivedProfitAndLoss.cogs.map((item: any) => [`  ${item.accountName}`, item.balance]),
-      ["TOTAL COGS", derivedProfitAndLoss.totalCogs],
-      [],
-      ["GROSS PROFIT", derivedProfitAndLoss.grossProfit],
-      [`GROSS MARGIN`, `${derivedProfitAndLoss.grossMargin.toFixed(2)}%`],
-      [],
-      ["OPERATING EXPENSES"],
-      ...derivedProfitAndLoss.expenses.map((item: any) => [`  ${item.accountName}`, item.balance]),
-      ["TOTAL OPERATING EXPENSES", derivedProfitAndLoss.totalExpenses],
-      [],
-      ["NET INCOME", derivedProfitAndLoss.netIncome],
-      [`NET MARGIN`, `${derivedProfitAndLoss.netMargin.toFixed(2)}%`],
-    ];
-    const ws = XLSX.utils.aoa_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Profit & Loss");
-    XLSX.writeFile(wb, `profit-and-loss-${format(new Date(), "yyyy-MM-dd")}.xlsx`);
-    toast({ title: "Success", description: "Profit & Loss exported to Excel successfully." });
-  }
-
-  async function exportBalanceSheetToPDF() {
-    const { jsPDF } = await import("jspdf");
-    await import("jspdf-autotable");
-    const doc = new jsPDF() as any;
-    
-    doc.setFontSize(18);
-    doc.text("BALANCE SHEET", 105, 20, { align: "center" });
-    doc.setFontSize(11);
-    doc.text("Construction Company", 105, 28, { align: "center" });
-    doc.text(`As of: ${format(new Date(), "MMMM d, yyyy")}`, 105, 35, { align: "center" });
-    
-    let yPos = 50;
-    doc.setFontSize(12);
-    doc.setFont(undefined, "bold");
-    doc.text("ASSETS", 14, yPos);
-    yPos += 10;
-    
-    doc.setFontSize(11);
-    doc.text("CURRENT ASSETS", 14, yPos);
-    yPos += 7;
-    doc.setFontSize(10);
-    doc.setFont(undefined, "normal");
-    derivedBalanceSheet.currentAssets.forEach((item: any) => {
-      doc.text(`  ${item.accountName}`, 14, yPos);
-      doc.text(formatCurrency(item.balance), 195, yPos, { align: "right" });
-      yPos += 6;
-    });
-    doc.setFont(undefined, "bold");
-    doc.text("TOTAL CURRENT ASSETS", 14, yPos);
-    doc.text(formatCurrency(derivedBalanceSheet.totalCurrentAssets), 195, yPos, { align: "right" });
-    yPos += 10;
-    
-    doc.setFontSize(11);
-    doc.text("NON-CURRENT ASSETS", 14, yPos);
-    yPos += 7;
-    doc.setFontSize(10);
-    doc.setFont(undefined, "normal");
-    derivedBalanceSheet.nonCurrentAssets.forEach((item: any) => {
-      doc.text(`  ${item.accountName}`, 14, yPos);
-      doc.text(formatCurrency(item.balance), 195, yPos, { align: "right" });
-      yPos += 6;
-    });
-    doc.setFont(undefined, "bold");
-    doc.text("TOTAL NON-CURRENT ASSETS", 14, yPos);
-    doc.text(formatCurrency(derivedBalanceSheet.totalNonCurrentAssets), 195, yPos, { align: "right" });
-    yPos += 8;
-    
-    doc.setFontSize(12);
-    doc.text("TOTAL ASSETS", 14, yPos);
-    doc.text(formatCurrency(derivedBalanceSheet.totalAssets), 195, yPos, { align: "right" });
-    yPos += 15;
-    
-    doc.text("LIABILITIES & EQUITY", 14, yPos);
-    yPos += 10;
-    doc.setFontSize(11);
-    doc.text("CURRENT LIABILITIES", 14, yPos);
-    yPos += 7;
-    doc.setFontSize(10);
-    doc.setFont(undefined, "normal");
-    derivedBalanceSheet.currentLiabilities.forEach((item: any) => {
-      doc.text(`  ${item.accountName}`, 14, yPos);
-      doc.text(formatCurrency(item.balance), 195, yPos, { align: "right" });
-      yPos += 6;
-    });
-    doc.setFont(undefined, "bold");
-    doc.text("TOTAL CURRENT LIABILITIES", 14, yPos);
-    doc.text(formatCurrency(derivedBalanceSheet.totalCurrentLiabilities), 195, yPos, { align: "right" });
-    yPos += 10;
-    
-    doc.setFontSize(11);
-    doc.text("LONG-TERM LIABILITIES", 14, yPos);
-    yPos += 7;
-    doc.setFontSize(10);
-    doc.setFont(undefined, "normal");
-    derivedBalanceSheet.longTermLiabilities.forEach((item: any) => {
-      doc.text(`  ${item.accountName}`, 14, yPos);
-      doc.text(formatCurrency(item.balance), 195, yPos, { align: "right" });
-      yPos += 6;
-    });
-    doc.setFont(undefined, "bold");
-    doc.text("TOTAL LONG-TERM LIABILITIES", 14, yPos);
-    doc.text(formatCurrency(derivedBalanceSheet.totalLongTermLiabilities), 195, yPos, { align: "right" });
-    yPos += 8;
-    
-    doc.setFontSize(11);
-    doc.text("TOTAL LIABILITIES", 14, yPos);
-    doc.text(formatCurrency(derivedBalanceSheet.totalLiabilities), 195, yPos, { align: "right" });
-    yPos += 10;
-    
-    doc.text("EQUITY", 14, yPos);
-    yPos += 7;
-    doc.setFontSize(10);
-    doc.setFont(undefined, "normal");
-    derivedBalanceSheet.equity.forEach((item: any) => {
-      doc.text(`  ${item.accountName}`, 14, yPos);
-      doc.text(formatCurrency(item.balance), 195, yPos, { align: "right" });
-      yPos += 6;
-    });
-    doc.setFont(undefined, "bold");
-    doc.text("TOTAL EQUITY", 14, yPos);
-    doc.text(formatCurrency(derivedBalanceSheet.totalEquity), 195, yPos, { align: "right" });
-    yPos += 10;
-    
-    doc.setFontSize(12);
-    doc.text("TOTAL LIABILITIES & EQUITY", 14, yPos);
-    doc.text(formatCurrency(derivedBalanceSheet.totalLiabilitiesAndEquity), 195, yPos, { align: "right" });
-    
-    doc.save(`balance-sheet-${format(new Date(), "yyyy-MM-dd")}.pdf`);
-    toast({ title: "Success", description: "Balance Sheet exported to PDF successfully." });
-  }
-
-  async function exportBalanceSheetToExcel() {
-    const XLSX = await import("xlsx");
-    const data = [
-      ["BALANCE SHEET"],
-      ["Construction Company"],
-      [`As of: ${format(new Date(), "MMMM d, yyyy")}`],
-      [],
-      ["ASSETS"],
-      [],
-      ["CURRENT ASSETS"],
-      ...derivedBalanceSheet.currentAssets.map((item: any) => [`  ${item.accountName}`, item.balance]),
-      ["TOTAL CURRENT ASSETS", derivedBalanceSheet.totalCurrentAssets],
-      [],
-      ["NON-CURRENT ASSETS"],
-      ...derivedBalanceSheet.nonCurrentAssets.map((item: any) => [`  ${item.accountName}`, item.balance]),
-      ["TOTAL NON-CURRENT ASSETS", derivedBalanceSheet.totalNonCurrentAssets],
-      [],
-      ["TOTAL ASSETS", derivedBalanceSheet.totalAssets],
-      [],
-      ["LIABILITIES & EQUITY"],
-      [],
-      ["CURRENT LIABILITIES"],
-      ...derivedBalanceSheet.currentLiabilities.map((item: any) => [`  ${item.accountName}`, item.balance]),
-      ["TOTAL CURRENT LIABILITIES", derivedBalanceSheet.totalCurrentLiabilities],
-      [],
-      ["LONG-TERM LIABILITIES"],
-      ...derivedBalanceSheet.longTermLiabilities.map((item: any) => [`  ${item.accountName}`, item.balance]),
-      ["TOTAL LONG-TERM LIABILITIES", derivedBalanceSheet.totalLongTermLiabilities],
-      [],
-      ["TOTAL LIABILITIES", derivedBalanceSheet.totalLiabilities],
-      [],
-      ["EQUITY"],
-      ...derivedBalanceSheet.equity.map((item: any) => [`  ${item.accountName}`, item.balance]),
-      ["TOTAL EQUITY", derivedBalanceSheet.totalEquity],
-      [],
-      ["TOTAL LIABILITIES & EQUITY", derivedBalanceSheet.totalLiabilitiesAndEquity],
-    ];
-    const ws = XLSX.utils.aoa_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Balance Sheet");
-    XLSX.writeFile(wb, `balance-sheet-${format(new Date(), "yyyy-MM-dd")}.xlsx`);
-    toast({ title: "Success", description: "Balance Sheet exported to Excel successfully." });
-  }
-
-  async function loadRecurringEntries() {
-    try {
-      const data = await getRecurringJournalEntries();
-      setRecurringEntries(data);
-    } catch (error) {
-      console.error(error);
-      toast({ title: "Error", description: "Failed to load recurring entries", variant: "destructive" });
-    }
-  }
-
-  async function handleSaveRecurringEntry() {
-    try {
-      if (recurringLines.length === 0) {
-        toast({ title: "Validation Error", description: "Add at least one journal line", variant: "destructive" });
-        return;
-      }
-
-      const totalDebit = recurringLines.reduce((sum, line) => sum + (Number(line.debit) || 0), 0);
-      const totalCredit = recurringLines.reduce((sum, line) => sum + (Number(line.credit) || 0), 0);
-      
-      if (totalDebit !== totalCredit) {
-        toast({ title: "Validation Error", description: "Debits must equal credits", variant: "destructive" });
-        return;
-      }
-
-      const entryData = {
-        projectId: recurringFormData.projectId || undefined,
-        description: recurringFormData.description,
-        frequency: recurringFormData.frequency,
-        startDate: recurringFormData.startDate,
-        endDate: recurringFormData.endDate || undefined,
-        nextOccurrence: recurringFormData.startDate,
-        isActive: true,
-      };
-
-      if (editingRecurring) {
-        await updateRecurringJournalEntry(editingRecurring.id, entryData);
-        toast({ title: "Success", description: "Recurring entry updated successfully" });
-      } else {
-        await createRecurringJournalEntry(entryData, recurringLines);
-        toast({ title: "Success", description: "Recurring entry created successfully" });
-      }
-
-      setRecurringDialogOpen(false);
-      setEditingRecurring(null);
-      setRecurringFormData({
-        description: "",
-        frequency: "monthly",
-        startDate: new Date().toISOString().split("T")[0],
-        endDate: "",
-        projectId: "",
-      });
-      setRecurringLines([]);
-      loadRecurringEntries();
-    } catch (error) {
-      console.error(error);
-      toast({ title: "Error", description: "Failed to save recurring entry", variant: "destructive" });
-    }
-  }
-
-  async function handleDeleteRecurringEntry(id: string) {
-    if (!confirm("Delete this recurring entry?")) return;
-    
-    try {
-      await deleteRecurringJournalEntry(id);
-      toast({ title: "Success", description: "Recurring entry deleted" });
-      loadRecurringEntries();
-    } catch (error) {
-      console.error(error);
-      toast({ title: "Error", description: "Failed to delete recurring entry", variant: "destructive" });
-    }
-  }
-
-  async function handleGenerateRecurringEntries() {
-    try {
-      const generated = await generateJournalEntriesFromRecurring();
-      toast({ 
-        title: "Success", 
-        description: `Generated ${generated.length} journal entries from recurring templates` 
-      });
-      loadData();
-      loadRecurringEntries();
-    } catch (error) {
-      console.error(error);
-      toast({ title: "Error", description: "Failed to generate entries", variant: "destructive" });
-    }
-  }
-
-  async function loadBankReconciliations() {
-    try {
-      const data = await getBankReconciliations();
-      setReconciliations(data);
-    } catch (error) {
-      console.error(error);
-      toast({ title: "Error", description: "Failed to load reconciliations", variant: "destructive" });
-    }
-  }
-
-  async function handleSaveBankReconciliation() {
-    try {
-      if (!reconciliationFormData.accountId) {
-        toast({ title: "Validation Error", description: "Select a bank account", variant: "destructive" });
-        return;
-      }
-
-      const reconciliationData = {
-        accountId: reconciliationFormData.accountId,
-        statementDate: reconciliationFormData.statementDate,
-        statementBalance: reconciliationFormData.statementBalance,
-        bookBalance: reconciliationFormData.bookBalance,
-        status: "in_progress" as const,
-      };
-
-      if (editingReconciliation) {
-        await updateBankReconciliation(editingReconciliation.id, {
-          ...reconciliationData,
-          status: editingReconciliation.status,
-        });
-        toast({ title: "Success", description: "Reconciliation updated" });
-      } else {
-        await createBankReconciliation(reconciliationData, bankTransactions);
-        toast({ title: "Success", description: "Bank reconciliation created" });
-      }
-
-      setReconciliationDialogOpen(false);
-      setEditingReconciliation(null);
-      setReconciliationFormData({
-        accountId: "",
-        statementDate: new Date().toISOString().split("T")[0],
-        statementBalance: 0,
-        bookBalance: 0,
-      });
-      setBankTransactions([]);
-      loadBankReconciliations();
-    } catch (error) {
-      console.error(error);
-      toast({ title: "Error", description: "Failed to save reconciliation", variant: "destructive" });
-    }
-  }
-
-  async function handleCompleteReconciliation(id: string) {
-    try {
-      const reconciliation = reconciliations.find((r: any) => r.id === id);
-      if (!reconciliation) return;
-
-      const matchedTotal = reconciliation.transactions?.filter((t: any) => t.isMatched).reduce((sum: number, t: any) => sum + (t.debit - t.credit), 0) || 0;
-      
-      await updateBankReconciliation(id, {
-        status: "completed",
-        reconciledBalance: matchedTotal,
-      });
-
-      toast({ title: "Success", description: "Reconciliation completed" });
-      loadBankReconciliations();
-    } catch (error) {
-      console.error(error);
-      toast({ title: "Error", description: "Failed to complete reconciliation", variant: "destructive" });
-    }
-  }
-
-  async function loadPeriodComparison() {
-    try {
-      const data = await getFinancialStatementComparison(comparisonPeriods);
-      setComparisonData(data);
-    } catch (error) {
-      console.error(error);
-      toast({ title: "Error", description: "Failed to load comparison", variant: "destructive" });
-    }
-  }
-
-  if (loading) return <CRMLayout><div className="flex items-center justify-center h-96"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div></CRMLayout>;
 
   return (
     <CRMLayout>
@@ -913,7 +302,7 @@ export default function AccountingPage() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-8">
-            <TabsTrigger value="journal-entries">Journal Entries</TabsTrigger>
+            <TabsTrigger value="journal">Journal Entries</TabsTrigger>
             <TabsTrigger value="chart-of-accounts">Chart of Accounts</TabsTrigger>
             <TabsTrigger value="financial-statements">Financial Statements</TabsTrigger>
             <TabsTrigger value="ar-aging">AR Aging</TabsTrigger>
@@ -924,7 +313,7 @@ export default function AccountingPage() {
           </TabsList>
 
           {/* JOURNAL ENTRIES TAB */}
-          <TabsContent value="journal-entries" className="space-y-4">
+          <TabsContent value="journal" className="space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="text-xl font-semibold">Recent Entries</h2>
               
@@ -1539,7 +928,7 @@ export default function AccountingPage() {
                       Generate Due Entries
                     </Button>
                     <Button onClick={() => {
-                      setEditingRecurringEntry(null);
+                      setEditingRecurring(null);
                       setRecurringFormData({
                         description: "",
                         frequency: "monthly",
@@ -1547,11 +936,11 @@ export default function AccountingPage() {
                         endDate: "",
                         projectId: "",
                         isActive: true,
-                        lines: [
-                          { accountId: "", description: "", debit: 0, credit: 0 },
-                          { accountId: "", description: "", debit: 0, credit: 0 },
-                        ],
                       });
+                      setRecurringLines([
+                        { accountId: "", description: "", debit: 0, credit: 0 },
+                        { accountId: "", description: "", debit: 0, credit: 0 },
+                      ]);
                       setRecurringDialogOpen(true);
                     }}>
                       <Plus className="h-4 w-4 mr-2" />
@@ -1666,7 +1055,7 @@ export default function AccountingPage() {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => {
-                                  setEditingRecurringEntry(entry);
+                                  setEditingRecurring(entry);
                                   setRecurringFormData({
                                     description: entry.description,
                                     frequency: entry.frequency,
@@ -1674,8 +1063,8 @@ export default function AccountingPage() {
                                     endDate: entry.endDate || "",
                                     projectId: entry.projectId || "",
                                     isActive: entry.isActive,
-                                    lines: entry.lines || [],
                                   });
+                                  setRecurringLines(entry.lines || []);
                                   setRecurringDialogOpen(true);
                                 }}
                               >
@@ -1717,197 +1106,6 @@ export default function AccountingPage() {
                 )}
               </CardContent>
             </Card>
-
-            {/* Recurring Entry Dialog */}
-            <Dialog open={recurringDialogOpen} onOpenChange={setRecurringDialogOpen}>
-              <DialogContent className="max-w-4xl">
-                <DialogHeader>
-                  <DialogTitle>{editingRecurring ? "Edit" : "Create"} Recurring Journal Entry</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Description</Label>
-                      <Input
-                        placeholder="e.g., Monthly office rent"
-                        value={recurringFormData.description}
-                        onChange={e => setRecurringFormData({ ...recurringFormData, description: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Frequency</Label>
-                      <Select
-                        value={recurringFormData.frequency}
-                        onValueChange={v => setRecurringFormData({ ...recurringFormData, frequency: v as any })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="daily">Daily</SelectItem>
-                          <SelectItem value="weekly">Weekly</SelectItem>
-                          <SelectItem value="monthly">Monthly</SelectItem>
-                          <SelectItem value="quarterly">Quarterly</SelectItem>
-                          <SelectItem value="yearly">Yearly</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Start Date</Label>
-                      <Input
-                        type="date"
-                        value={recurringFormData.startDate}
-                        onChange={e => setRecurringFormData({ ...recurringFormData, startDate: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>End Date (Optional)</Label>
-                      <Input
-                        type="date"
-                        value={recurringFormData.endDate}
-                        onChange={e => setRecurringFormData({ ...recurringFormData, endDate: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-2 col-span-2">
-                      <Label>Project (Optional)</Label>
-                      <Select
-                        value={recurringFormData.projectId}
-                        onValueChange={v => setRecurringFormData({ ...recurringFormData, projectId: v })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select project" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="">General (No Project)</SelectItem>
-                          {projects.map(p => (
-                            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="border rounded-md mt-4">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Account</TableHead>
-                          <TableHead>Description</TableHead>
-                          <TableHead className="w-32 text-right">Debit</TableHead>
-                          <TableHead className="w-32 text-right">Credit</TableHead>
-                          <TableHead className="w-12"></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {recurringLines.map((line, i) => (
-                          <TableRow key={i}>
-                            <TableCell>
-                              <Select
-                                value={line.accountId}
-                                onValueChange={v => {
-                                  const updated = [...recurringLines];
-                                  updated[i].accountId = v;
-                                  setRecurringLines(updated);
-                                }}
-                              >
-                                <SelectTrigger className="w-[200px]">
-                                  <SelectValue placeholder="Select Account" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {accounts.map(acc => (
-                                    <SelectItem key={acc.id} value={acc.id}>
-                                      {acc.code} - {acc.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </TableCell>
-                            <TableCell>
-                              <Input
-                                placeholder="Line description"
-                                value={line.description}
-                                onChange={e => {
-                                  const updated = [...recurringLines];
-                                  updated[i].description = e.target.value;
-                                  setRecurringLines(updated);
-                                }}
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Input
-                                type="number"
-                                className="text-right"
-                                value={line.debit || ""}
-                                onChange={e => {
-                                  const updated = [...recurringLines];
-                                  updated[i].debit = Number(e.target.value);
-                                  if (Number(e.target.value) > 0) updated[i].credit = 0;
-                                  setRecurringLines(updated);
-                                }}
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Input
-                                type="number"
-                                className="text-right"
-                                value={line.credit || ""}
-                                onChange={e => {
-                                  const updated = [...recurringLines];
-                                  updated[i].credit = Number(e.target.value);
-                                  if (Number(e.target.value) > 0) updated[i].debit = 0;
-                                  setRecurringLines(updated);
-                                }}
-                              />
-                            </TableCell>
-                            <TableCell>
-                              {recurringLines.length > 1 && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => setRecurringLines(recurringLines.filter((_, idx) => idx !== i))}
-                                >
-                                  <Trash2 className="w-4 h-4 text-destructive" />
-                                </Button>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-
-                  <div className="flex justify-between items-center pt-2">
-                    <Button
-                      variant="outline"
-                      onClick={() =>
-                        setRecurringLines([
-                          ...recurringLines,
-                          { accountId: "", description: "", debit: 0, credit: 0 },
-                        ])
-                      }
-                    >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add Line
-                    </Button>
-                    <div className="flex gap-8 font-semibold">
-                      <div>
-                        Total Debit: {formatCurrency(recurringLines.reduce((sum, l) => sum + (Number(l.debit) || 0), 0))}
-                      </div>
-                      <div>
-                        Total Credit: {formatCurrency(recurringLines.reduce((sum, l) => sum + (Number(l.credit) || 0), 0))}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end gap-2 pt-4">
-                    <Button variant="outline" onClick={() => setRecurringDialogOpen(false)}>
-                      Cancel
-                    </Button>
-                    <Button onClick={handleSaveRecurringEntry}>Save Recurring Entry</Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
           </TabsContent>
 
           {/* BANK RECONCILIATION TAB */}
@@ -1930,8 +1128,8 @@ export default function AccountingPage() {
                       bookBalance: 0,
                       reconciledBalance: 0,
                       status: "in_progress",
-                      transactions: [],
                     });
+                    setBankTransactions([]);
                     setReconciliationDialogOpen(true);
                   }}>
                     <Plus className="h-4 w-4 mr-2" />
@@ -2070,10 +1268,10 @@ export default function AccountingPage() {
                                       statementDate: rec.statementDate,
                                       statementBalance: rec.statementBalance,
                                       bookBalance: rec.bookBalance,
-                                      reconciledBalance: rec.reconciledBalance,
+                                      reconciledBalance: rec.reconciledBalance || 0,
                                       status: rec.status,
-                                      transactions: rec.transactions || [],
                                     });
+                                    setBankTransactions(rec.transactions || []);
                                     setReconciliationDialogOpen(true);
                                   }}
                                 >
