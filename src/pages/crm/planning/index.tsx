@@ -53,7 +53,7 @@ export default function PlanningPage() {
     name: "",
     startDate: "",
     endDate: "",
-    status: "not_started" as "not_started" | "in_progress" | "completed" | "delayed",
+    status: "not-started" as PlanningPhaseStatus,
     progress: 0,
     dependencies: "",
     assignedRole: "",
@@ -116,7 +116,7 @@ export default function PlanningPage() {
         name: "",
         startDate: "",
         endDate: "",
-        status: "not_started",
+        status: "not-started",
         progress: 0,
         dependencies: "",
         assignedRole: "",
@@ -209,7 +209,7 @@ export default function PlanningPage() {
     // Table
     const tableData = phases.map(phase => [
       phase.name,
-      phase.status.replace("_", " "),
+      phase.status.replace(/-/g, " "),
       new Date(phase.startDate).toLocaleDateString(),
       new Date(phase.endDate).toLocaleDateString(),
       `${phase.progress}%`,
@@ -246,7 +246,7 @@ export default function PlanningPage() {
       ["Phase Name", "Status", "Start Date", "End Date", "Progress", "Assigned Role", "Milestone", "Billing Trigger"],
       ...phases.map(phase => [
         phase.name,
-        phase.status.replace("_", " "),
+        phase.status.replace(/-/g, " "),
         new Date(phase.startDate).toLocaleDateString(),
         new Date(phase.endDate).toLocaleDateString(),
         `${phase.progress}%`,
@@ -473,8 +473,8 @@ export default function PlanningPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "not_started": return "bg-gray-100 text-gray-700";
-      case "in_progress": return "bg-blue-100 text-blue-700";
+      case "not-started": return "bg-gray-100 text-gray-700";
+      case "in-progress": return "bg-blue-100 text-blue-700";
       case "completed": return "bg-green-100 text-green-700";
       case "delayed": return "bg-red-100 text-red-700";
       default: return "bg-gray-100 text-gray-700";
@@ -599,7 +599,7 @@ export default function PlanningPage() {
                         )}
                       </div>
                       <Badge className={getStatusColor(phase.status)}>
-                        {phase.status.replace("_", " ")}
+                        {phase.status.replace(/-/g, " ")}
                       </Badge>
                     </div>
                     <div className="flex items-center gap-2">
