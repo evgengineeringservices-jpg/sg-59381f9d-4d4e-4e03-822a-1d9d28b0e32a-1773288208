@@ -274,7 +274,7 @@ export default function AccountingPage() {
     const nonCurrentAssets = accounts.filter(a => a.type === 'asset' && (a.name.includes('Property') || a.name.includes('Equipment') || a.name.includes('Accumulated')) && (statements.balances[a.id] || 0) !== 0).map(a => ({ accountName: a.name, balance: statements.balances[a.id] || 0 }));
     const currentLiabilities = accounts.filter(a => a.type === 'liability' && !a.name.includes('Long-term') && !a.name.includes('Retention') && (statements.balances[a.id] || 0) !== 0).map(a => ({ accountName: a.name, balance: statements.balances[a.id] || 0 }));
     const longTermLiabilities = accounts.filter(a => a.type === 'liability' && (a.name.includes('Long-term') || a.name.includes('Retention')) && (statements.balances[a.id] || 0) !== 0).map(a => ({ accountName: a.name, balance: statements.balances[a.id] || 0 }));
-    const equityAccs = accounts.filter(a => a.type === 'equity' && (statements.balances[a.id] || 0) !== 0).map(a => ({ accountName: a.name, balance: statements.balances[a.id] || 0 }));
+    const equityAccs = accounts.filter(a => a.type === 'equity' && !a.name.includes('Long-term') && !a.name.includes('Retention') && (statements.balances[a.id] || 0) !== 0).map(a => ({ accountName: a.name, balance: statements.balances[a.id] || 0 }));
     
     if (statements.netIncome !== 0) {
        equityAccs.push({ accountName: "Current Year Earnings", balance: statements.netIncome });
@@ -582,6 +582,176 @@ export default function AccountingPage() {
     toast({ title: "Success", description: "Balance Sheet exported to Excel successfully." });
   }
 
+  async function loadRecurringEntries() {
+    try {
+      const data = await getRecurringJournalEntries();
+      setRecurringEntries(data);
+    } catch (error) {
+      console.error(error);
+      toast({ title: "Error", description: "Failed to load recurring entries", variant: "destructive" });
+    }
+  }
+
+  async function handleSaveRecurringEntry() {
+    try {
+      if (recurringLines.length === 0) {
+        toast({ title: "Validation Error", description: "Add at least one journal line", variant: "destructive" });
+        return;
+      }
+
+      const totalDebit = recurringLines.reduce((sum, line) => sum + (Number(line.debit) || 0), 0);
+      const totalCredit = recurringLines.reduce((sum, line) => sum + (Number(line.credit) || 0), 0);
+      
+      if (totalDebit !== totalCredit) {
+        toast({ title: "Validation Error", description: "Debits must equal credits", variant: "destructive" });
+        return;
+      }
+
+      const entryData = {
+        projectId: recurringFormData.projectId || undefined,
+        description: recurringFormData.description,
+        frequency: recurringFormData.frequency,
+        startDate: recurringFormData.startDate,
+        endDate: recurringFormData.endDate || undefined,
+        nextOccurrence: recurringFormData.startDate,
+        isActive: true,
+      };
+
+      if (editingRecurring) {
+        await updateRecurringJournalEntry(editingRecurring.id, entryData);
+        toast({ title: "Success", description: "Recurring entry updated successfully" });
+      } else {
+        await createRecurringJournalEntry(entryData, recurringLines);
+        toast({ title: "Success", description: "Recurring entry created successfully" });
+      }
+
+      setRecurringDialogOpen(false);
+      setEditingRecurring(null);
+      setRecurringFormData({
+        description: "",
+        frequency: "monthly",
+        startDate: new Date().toISOString().split("T")[0],
+        endDate: "",
+        projectId: "",
+      });
+      setRecurringLines([]);
+      loadRecurringEntries();
+    } catch (error) {
+      console.error(error);
+      toast({ title: "Error", description: "Failed to save recurring entry", variant: "destructive" });
+    }
+  }
+
+  async function handleDeleteRecurringEntry(id: string) {
+    if (!confirm("Delete this recurring entry?")) return;
+    
+    try {
+      await deleteRecurringJournalEntry(id);
+      toast({ title: "Success", description: "Recurring entry deleted" });
+      loadRecurringEntries();
+    } catch (error) {
+      console.error(error);
+      toast({ title: "Error", description: "Failed to delete recurring entry", variant: "destructive" });
+    }
+  }
+
+  async function handleGenerateFromRecurring() {
+    try {
+      const generated = await generateJournalEntriesFromRecurring();
+      toast({ 
+        title: "Success", 
+        description: `Generated ${generated.length} journal entries from recurring templates` 
+      });
+      loadData();
+      loadRecurringEntries();
+    } catch (error) {
+      console.error(error);
+      toast({ title: "Error", description: "Failed to generate entries", variant: "destructive" });
+    }
+  }
+
+  async function loadBankReconciliations() {
+    try {
+      const data = await getBankReconciliations();
+      setReconciliations(data);
+    } catch (error) {
+      console.error(error);
+      toast({ title: "Error", description: "Failed to load reconciliations", variant: "destructive" });
+    }
+  }
+
+  async function handleSaveBankReconciliation() {
+    try {
+      if (!reconciliationFormData.accountId) {
+        toast({ title: "Validation Error", description: "Select a bank account", variant: "destructive" });
+        return;
+      }
+
+      const reconciliationData = {
+        accountId: reconciliationFormData.accountId,
+        statementDate: reconciliationFormData.statementDate,
+        statementBalance: reconciliationFormData.statementBalance,
+        bookBalance: reconciliationFormData.bookBalance,
+        status: "in_progress" as const,
+      };
+
+      if (editingReconciliation) {
+        await updateBankReconciliation(editingReconciliation.id, {
+          ...reconciliationData,
+          status: editingReconciliation.status,
+        });
+        toast({ title: "Success", description: "Reconciliation updated" });
+      } else {
+        await createBankReconciliation(reconciliationData, bankTransactions);
+        toast({ title: "Success", description: "Bank reconciliation created" });
+      }
+
+      setReconciliationDialogOpen(false);
+      setEditingReconciliation(null);
+      setReconciliationFormData({
+        accountId: "",
+        statementDate: new Date().toISOString().split("T")[0],
+        statementBalance: 0,
+        bookBalance: 0,
+      });
+      setBankTransactions([]);
+      loadBankReconciliations();
+    } catch (error) {
+      console.error(error);
+      toast({ title: "Error", description: "Failed to save reconciliation", variant: "destructive" });
+    }
+  }
+
+  async function handleCompleteReconciliation(id: string) {
+    try {
+      const reconciliation = reconciliations.find((r: any) => r.id === id);
+      if (!reconciliation) return;
+
+      const matchedTotal = reconciliation.transactions?.filter((t: any) => t.isMatched).reduce((sum: number, t: any) => sum + (t.debit - t.credit), 0) || 0;
+      
+      await updateBankReconciliation(id, {
+        status: "completed",
+        reconciledBalance: matchedTotal,
+      });
+
+      toast({ title: "Success", description: "Reconciliation completed" });
+      loadBankReconciliations();
+    } catch (error) {
+      console.error(error);
+      toast({ title: "Error", description: "Failed to complete reconciliation", variant: "destructive" });
+    }
+  }
+
+  async function loadPeriodComparison() {
+    try {
+      const data = await getFinancialStatementComparison(comparisonPeriods);
+      setComparisonData(data);
+    } catch (error) {
+      console.error(error);
+      toast({ title: "Error", description: "Failed to load comparison", variant: "destructive" });
+    }
+  }
+
   if (loading) return <CRMLayout><div className="flex justify-center p-12"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div></CRMLayout>;
 
   return (
@@ -593,12 +763,15 @@ export default function AccountingPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-8">
             <TabsTrigger value="journal-entries">Journal Entries</TabsTrigger>
             <TabsTrigger value="chart-of-accounts">Chart of Accounts</TabsTrigger>
             <TabsTrigger value="financial-statements">Financial Statements</TabsTrigger>
             <TabsTrigger value="ar-aging">AR Aging</TabsTrigger>
             <TabsTrigger value="ap-aging">AP Aging</TabsTrigger>
+            <TabsTrigger value="recurring">Recurring Entries</TabsTrigger>
+            <TabsTrigger value="bank-reconciliation">Bank Reconciliation</TabsTrigger>
+            <TabsTrigger value="period-comparison">Period Comparison</TabsTrigger>
           </TabsList>
 
           {/* JOURNAL ENTRIES TAB */}
@@ -798,7 +971,7 @@ export default function AccountingPage() {
                   
                   <div className="space-y-2 pl-4">
                     <div className="text-sm font-medium text-muted-foreground mb-1">Direct Costs (COGS)</div>
-                    {accounts.filter(a => a.type === 'expense' && a.category.includes('Direct') && (statements.balances[a.id] || 0) > 0).map(acc => (
+                    {accounts.filter(a => a.type === 'expense' && a.category.includes('Direct') && (statements.balances[a.id] || 0) !== 0).map(acc => (
                       <div key={acc.id} className="flex justify-between text-sm">
                         <span>{acc.name}</span>
                         <span>{formatCurrency(statements.balances[acc.id] || 0)}</span>
@@ -811,13 +984,13 @@ export default function AccountingPage() {
                   </div>
 
                   <div className="flex justify-between items-end border-b border-t py-3 bg-muted/10 px-2 rounded">
-                    <span className="font-bold">Gross Profit</span>
+                    <span className="font-bold text-sm uppercase">Gross Profit</span>
                     <span className="font-bold text-primary">{formatCurrency(statements.grossProfit)}</span>
                   </div>
 
                   <div className="space-y-2 pl-4">
                     <div className="text-sm font-medium text-muted-foreground mb-1">Overhead Expenses</div>
-                    {accounts.filter(a => a.type === 'expense' && a.category.includes('Overhead') && (statements.balances[a.id] || 0) > 0).map(acc => (
+                    {accounts.filter(a => a.type === 'expense' && a.category.includes('Overhead') && (statements.balances[a.id] || 0) !== 0).map(acc => (
                       <div key={acc.id} className="flex justify-between text-sm">
                         <span>{acc.name}</span>
                         <span>{formatCurrency(statements.balances[acc.id] || 0)}</span>
@@ -1196,6 +1369,838 @@ export default function AccountingPage() {
                     <p>Click "Refresh" to load AP Aging Report</p>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* RECURRING ENTRIES TAB */}
+          <TabsContent value="recurring" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Recurring Journal Entries</CardTitle>
+                    <CardDescription>Automate recurring transactions like rent, utilities, and salaries</CardDescription>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button onClick={handleGenerateFromRecurring} variant="outline">
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Generate Due Entries
+                    </Button>
+                    <Button onClick={() => { loadRecurringEntries(); setRecurringDialogOpen(true); }}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      New Recurring Entry
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Description</TableHead>
+                        <TableHead>Frequency</TableHead>
+                        <TableHead>Next Occurrence</TableHead>
+                        <TableHead>Project</TableHead>
+                        <TableHead className="text-center">Status</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {recurringEntries.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                            No recurring entries found. Click "New Recurring Entry" to create one.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        recurringEntries.map((entry: any) => (
+                          <TableRow key={entry.id}>
+                            <TableCell className="font-medium">{entry.description}</TableCell>
+                            <TableCell className="capitalize">{entry.frequency}</TableCell>
+                            <TableCell>{format(new Date(entry.nextOccurrence), "MMM d, yyyy")}</TableCell>
+                            <TableCell>
+                              {entry.projectId ? projects.find(p => p.id === entry.projectId)?.name || "N/A" : "General"}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Badge variant={entry.isActive ? "default" : "secondary"}>
+                                {entry.isActive ? "Active" : "Inactive"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setEditingRecurring(entry);
+                                    setRecurringFormData({
+                                      description: entry.description,
+                                      frequency: entry.frequency,
+                                      startDate: entry.startDate,
+                                      endDate: entry.endDate || "",
+                                      projectId: entry.projectId || "",
+                                    });
+                                    setRecurringLines(entry.lines?.map((l: any) => ({
+                                      accountId: l.accountId,
+                                      description: l.description,
+                                      debit: l.debit,
+                                      credit: l.credit,
+                                    })) || []);
+                                    setRecurringDialogOpen(true);
+                                  }}
+                                >
+                                  Edit
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteRecurringEntry(entry.id)}
+                                  className="text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Recurring Entry Dialog */}
+            <Dialog open={recurringDialogOpen} onOpenChange={setRecurringDialogOpen}>
+              <DialogContent className="max-w-4xl">
+                <DialogHeader>
+                  <DialogTitle>{editingRecurring ? "Edit" : "Create"} Recurring Journal Entry</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Description</Label>
+                      <Input
+                        placeholder="e.g., Monthly office rent"
+                        value={recurringFormData.description}
+                        onChange={e => setRecurringFormData({ ...recurringFormData, description: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Frequency</Label>
+                      <Select
+                        value={recurringFormData.frequency}
+                        onValueChange={v => setRecurringFormData({ ...recurringFormData, frequency: v as any })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="daily">Daily</SelectItem>
+                          <SelectItem value="weekly">Weekly</SelectItem>
+                          <SelectItem value="monthly">Monthly</SelectItem>
+                          <SelectItem value="quarterly">Quarterly</SelectItem>
+                          <SelectItem value="yearly">Yearly</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Start Date</Label>
+                      <Input
+                        type="date"
+                        value={recurringFormData.startDate}
+                        onChange={e => setRecurringFormData({ ...recurringFormData, startDate: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>End Date (Optional)</Label>
+                      <Input
+                        type="date"
+                        value={recurringFormData.endDate}
+                        onChange={e => setRecurringFormData({ ...recurringFormData, endDate: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2 col-span-2">
+                      <Label>Project (Optional)</Label>
+                      <Select
+                        value={recurringFormData.projectId}
+                        onValueChange={v => setRecurringFormData({ ...recurringFormData, projectId: v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select project" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">General (No Project)</SelectItem>
+                          {projects.map(p => (
+                            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="border rounded-md mt-4">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Account</TableHead>
+                          <TableHead>Description</TableHead>
+                          <TableHead className="w-32 text-right">Debit</TableHead>
+                          <TableHead className="w-32 text-right">Credit</TableHead>
+                          <TableHead className="w-12"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {recurringLines.map((line, i) => (
+                          <TableRow key={i}>
+                            <TableCell>
+                              <Select
+                                value={line.accountId}
+                                onValueChange={v => {
+                                  const updated = [...recurringLines];
+                                  updated[i].accountId = v;
+                                  setRecurringLines(updated);
+                                }}
+                              >
+                                <SelectTrigger className="w-[200px]">
+                                  <SelectValue placeholder="Select Account" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {accounts.map(acc => (
+                                    <SelectItem key={acc.id} value={acc.id}>
+                                      {acc.code} - {acc.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                placeholder="Line description"
+                                value={line.description}
+                                onChange={e => {
+                                  const updated = [...recurringLines];
+                                  updated[i].description = e.target.value;
+                                  setRecurringLines(updated);
+                                }}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                type="number"
+                                className="text-right"
+                                value={line.debit || ""}
+                                onChange={e => {
+                                  const updated = [...recurringLines];
+                                  updated[i].debit = Number(e.target.value);
+                                  if (Number(e.target.value) > 0) updated[i].credit = 0;
+                                  setRecurringLines(updated);
+                                }}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                type="number"
+                                className="text-right"
+                                value={line.credit || ""}
+                                onChange={e => {
+                                  const updated = [...recurringLines];
+                                  updated[i].credit = Number(e.target.value);
+                                  if (Number(e.target.value) > 0) updated[i].debit = 0;
+                                  setRecurringLines(updated);
+                                }}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              {recurringLines.length > 1 && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setRecurringLines(recurringLines.filter((_, idx) => idx !== i))}
+                                >
+                                  <Trash2 className="w-4 h-4 text-destructive" />
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  <div className="flex justify-between items-center pt-2">
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        setRecurringLines([
+                          ...recurringLines,
+                          { accountId: "", description: "", debit: 0, credit: 0 },
+                        ])
+                      }
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Line
+                    </Button>
+                    <div className="flex gap-8 font-semibold">
+                      <div>
+                        Total Debit: {formatCurrency(recurringLines.reduce((sum, l) => sum + (Number(l.debit) || 0), 0))}
+                      </div>
+                      <div>
+                        Total Credit: {formatCurrency(recurringLines.reduce((sum, l) => sum + (Number(l.credit) || 0), 0))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-4">
+                    <Button variant="outline" onClick={() => setRecurringDialogOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={handleSaveRecurringEntry}>Save Recurring Entry</Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </TabsContent>
+
+          {/* BANK RECONCILIATION TAB */}
+          <TabsContent value="bank-reconciliation" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Bank Reconciliation</CardTitle>
+                    <CardDescription>Match bank statements with accounting records</CardDescription>
+                  </div>
+                  <Button onClick={() => { loadBankReconciliations(); setReconciliationDialogOpen(true); }}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    New Reconciliation
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Bank Account</TableHead>
+                        <TableHead>Statement Date</TableHead>
+                        <TableHead className="text-right">Statement Balance</TableHead>
+                        <TableHead className="text-right">Book Balance</TableHead>
+                        <TableHead className="text-right">Difference</TableHead>
+                        <TableHead className="text-center">Status</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {reconciliations.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                            No reconciliations found. Click "New Reconciliation" to start.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        reconciliations.map((rec: any) => {
+                          const difference = rec.statementBalance - rec.bookBalance;
+                          return (
+                            <TableRow key={rec.id}>
+                              <TableCell className="font-medium">{rec.account?.name || "N/A"}</TableCell>
+                              <TableCell>{format(new Date(rec.statementDate), "MMM d, yyyy")}</TableCell>
+                              <TableCell className="text-right">{formatCurrency(rec.statementBalance)}</TableCell>
+                              <TableCell className="text-right">{formatCurrency(rec.bookBalance)}</TableCell>
+                              <TableCell className={`text-right font-semibold ${Math.abs(difference) < 1 ? "text-green-600" : "text-red-600"}`}>
+                                {formatCurrency(difference)}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge variant={rec.status === "completed" ? "default" : "secondary"}>
+                                  {rec.status === "completed" ? "Completed" : "In Progress"}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {rec.status !== "completed" && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleCompleteReconciliation(rec.id)}
+                                    className="text-green-600"
+                                  >
+                                    Complete
+                                  </Button>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Bank Reconciliation Dialog */}
+            <Dialog open={reconciliationDialogOpen} onOpenChange={setReconciliationDialogOpen}>
+              <DialogContent className="max-w-4xl">
+                <DialogHeader>
+                  <DialogTitle>New Bank Reconciliation</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Bank Account</Label>
+                      <Select
+                        value={reconciliationFormData.accountId}
+                        onValueChange={v => setReconciliationFormData({ ...reconciliationFormData, accountId: v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select bank account" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {accounts.filter(a => a.code.startsWith("1000")).map(acc => (
+                            <SelectItem key={acc.id} value={acc.id}>
+                              {acc.code} - {acc.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Statement Date</Label>
+                      <Input
+                        type="date"
+                        value={reconciliationFormData.statementDate}
+                        onChange={e =>
+                          setReconciliationFormData({ ...reconciliationFormData, statementDate: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Statement Balance</Label>
+                      <Input
+                        type="number"
+                        value={reconciliationFormData.statementBalance}
+                        onChange={e =>
+                          setReconciliationFormData({
+                            ...reconciliationFormData,
+                            statementBalance: Number(e.target.value),
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Book Balance</Label>
+                      <Input
+                        type="number"
+                        value={reconciliationFormData.bookBalance}
+                        onChange={e =>
+                          setReconciliationFormData({ ...reconciliationFormData, bookBalance: Number(e.target.value) })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <Label>Bank Statement Transactions</Label>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setBankTransactions([
+                            ...bankTransactions,
+                            {
+                              transactionDate: new Date().toISOString().split("T")[0],
+                              description: "",
+                              referenceNo: "",
+                              debit: 0,
+                              credit: 0,
+                              isMatched: false,
+                            },
+                          ])
+                        }
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Transaction
+                      </Button>
+                    </div>
+                    <div className="border rounded-md">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Description</TableHead>
+                            <TableHead>Reference</TableHead>
+                            <TableHead className="text-right">Debit</TableHead>
+                            <TableHead className="text-right">Credit</TableHead>
+                            <TableHead className="w-12"></TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {bankTransactions.map((txn, i) => (
+                            <TableRow key={i}>
+                              <TableCell>
+                                <Input
+                                  type="date"
+                                  value={txn.transactionDate}
+                                  onChange={e => {
+                                    const updated = [...bankTransactions];
+                                    updated[i].transactionDate = e.target.value;
+                                    setBankTransactions(updated);
+                                  }}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Input
+                                  placeholder="Description"
+                                  value={txn.description}
+                                  onChange={e => {
+                                    const updated = [...bankTransactions];
+                                    updated[i].description = e.target.value;
+                                    setBankTransactions(updated);
+                                  }}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Input
+                                  placeholder="Ref #"
+                                  value={txn.referenceNo}
+                                  onChange={e => {
+                                    const updated = [...bankTransactions];
+                                    updated[i].referenceNo = e.target.value;
+                                    setBankTransactions(updated);
+                                  }}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Input
+                                  type="number"
+                                  className="text-right"
+                                  value={txn.debit || ""}
+                                  onChange={e => {
+                                    const updated = [...bankTransactions];
+                                    updated[i].debit = Number(e.target.value);
+                                    if (Number(e.target.value) > 0) updated[i].credit = 0;
+                                    setBankTransactions(updated);
+                                  }}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Input
+                                  type="number"
+                                  className="text-right"
+                                  value={txn.credit || ""}
+                                  onChange={e => {
+                                    const updated = [...bankTransactions];
+                                    updated[i].credit = Number(e.target.value);
+                                    if (Number(e.target.value) > 0) updated[i].debit = 0;
+                                    setBankTransactions(updated);
+                                  }}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setBankTransactions(bankTransactions.filter((_, idx) => idx !== i))}
+                                >
+                                  <Trash2 className="w-4 h-4 text-destructive" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-4">
+                    <Button variant="outline" onClick={() => setReconciliationDialogOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={handleSaveBankReconciliation}>Save Reconciliation</Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </TabsContent>
+
+          {/* PERIOD COMPARISON TAB */}
+          <TabsContent value="period-comparison" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Period Comparison</CardTitle>
+                    <CardDescription>Compare financial statements across different time periods</CardDescription>
+                  </div>
+                  <Button onClick={loadPeriodComparison}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Generate Comparison
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  {/* Period Selection */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {comparisonPeriods.map((period, idx) => (
+                      <Card key={idx}>
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-sm">Period {idx + 1}</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                          <div className="space-y-1">
+                            <Label className="text-xs">Label</Label>
+                            <Input
+                              placeholder="e.g., Current Year"
+                              value={period.label}
+                              onChange={e => {
+                                const updated = [...comparisonPeriods];
+                                updated[idx].label = e.target.value;
+                                setComparisonPeriods(updated);
+                              }}
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-1">
+                              <Label className="text-xs">Start Date</Label>
+                              <Input
+                                type="date"
+                                value={period.startDate}
+                                onChange={e => {
+                                  const updated = [...comparisonPeriods];
+                                  updated[idx].startDate = e.target.value;
+                                  setComparisonPeriods(updated);
+                                }}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">End Date</Label>
+                              <Input
+                                type="date"
+                                value={period.endDate}
+                                onChange={e => {
+                                  const updated = [...comparisonPeriods];
+                                  updated[idx].endDate = e.target.value;
+                                  setComparisonPeriods(updated);
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+
+                  {/* Comparison Results */}
+                  {comparisonData && (
+                    <div className="space-y-6">
+                      {/* Profit & Loss Comparison */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Profit & Loss Comparison</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="border rounded-lg overflow-hidden">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Metric</TableHead>
+                                  {comparisonPeriods.map((period, idx) => (
+                                    <TableHead key={idx} className="text-right">
+                                      {period.label}
+                                    </TableHead>
+                                  ))}
+                                  <TableHead className="text-right">Variance</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                <TableRow>
+                                  <TableCell className="font-medium">Revenue</TableCell>
+                                  {comparisonPeriods.map((period, idx) => (
+                                    <TableCell key={idx} className="text-right">
+                                      {formatCurrency(comparisonData.profitAndLoss[period.label]?.revenue || 0)}
+                                    </TableCell>
+                                  ))}
+                                  <TableCell className="text-right font-semibold">
+                                    {comparisonPeriods.length === 2 && (
+                                      <>
+                                        {formatCurrency(
+                                          (comparisonData.profitAndLoss[comparisonPeriods[0].label]?.revenue || 0) -
+                                            (comparisonData.profitAndLoss[comparisonPeriods[1].label]?.revenue || 0)
+                                        )}
+                                      </>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell className="font-medium">COGS</TableCell>
+                                  {comparisonPeriods.map((period, idx) => (
+                                    <TableCell key={idx} className="text-right">
+                                      {formatCurrency(comparisonData.profitAndLoss[period.label]?.cogs || 0)}
+                                    </TableCell>
+                                  ))}
+                                  <TableCell className="text-right font-semibold">
+                                    {comparisonPeriods.length === 2 && (
+                                      <>
+                                        {formatCurrency(
+                                          (comparisonData.profitAndLoss[comparisonPeriods[0].label]?.cogs || 0) -
+                                            (comparisonData.profitAndLoss[comparisonPeriods[1].label]?.cogs || 0)
+                                        )}
+                                      </>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow className="bg-muted/50">
+                                  <TableCell className="font-bold">Gross Profit</TableCell>
+                                  {comparisonPeriods.map((period, idx) => (
+                                    <TableCell key={idx} className="text-right font-bold">
+                                      {formatCurrency(comparisonData.profitAndLoss[period.label]?.grossProfit || 0)}
+                                    </TableCell>
+                                  ))}
+                                  <TableCell className="text-right font-bold text-green-600">
+                                    {comparisonPeriods.length === 2 && (
+                                      <>
+                                        {formatCurrency(
+                                          (comparisonData.profitAndLoss[comparisonPeriods[0].label]?.grossProfit || 0) -
+                                            (comparisonData.profitAndLoss[comparisonPeriods[1].label]?.grossProfit || 0)
+                                        )}
+                                      </>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell className="font-medium">Operating Expenses</TableCell>
+                                  {comparisonPeriods.map((period, idx) => (
+                                    <TableCell key={idx} className="text-right">
+                                      {formatCurrency(comparisonData.profitAndLoss[period.label]?.expenses || 0)}
+                                    </TableCell>
+                                  ))}
+                                  <TableCell className="text-right font-semibold">
+                                    {comparisonPeriods.length === 2 && (
+                                      <>
+                                        {formatCurrency(
+                                          (comparisonData.profitAndLoss[comparisonPeriods[0].label]?.expenses || 0) -
+                                            (comparisonData.profitAndLoss[comparisonPeriods[1].label]?.expenses || 0)
+                                        )}
+                                      </>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow className="bg-muted/50">
+                                  <TableCell className="font-bold">Net Income</TableCell>
+                                  {comparisonPeriods.map((period, idx) => (
+                                    <TableCell key={idx} className="text-right font-bold">
+                                      {formatCurrency(comparisonData.profitAndLoss[period.label]?.netIncome || 0)}
+                                    </TableCell>
+                                  ))}
+                                  <TableCell className="text-right font-bold text-green-600">
+                                    {comparisonPeriods.length === 2 && (
+                                      <>
+                                        {formatCurrency(
+                                          (comparisonData.profitAndLoss[comparisonPeriods[0].label]?.netIncome || 0) -
+                                            (comparisonData.profitAndLoss[comparisonPeriods[1].label]?.netIncome || 0)
+                                        )}
+                                      </>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Balance Sheet Comparison */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Balance Sheet Comparison</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="border rounded-lg overflow-hidden">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Metric</TableHead>
+                                  {comparisonPeriods.map((period, idx) => (
+                                    <TableHead key={idx} className="text-right">
+                                      {period.label}
+                                    </TableHead>
+                                  ))}
+                                  <TableHead className="text-right">Variance</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                <TableRow>
+                                  <TableCell className="font-medium">Total Assets</TableCell>
+                                  {comparisonPeriods.map((period, idx) => (
+                                    <TableCell key={idx} className="text-right">
+                                      {formatCurrency(comparisonData.balanceSheet[period.label]?.totalAssets || 0)}
+                                    </TableCell>
+                                  ))}
+                                  <TableCell className="text-right font-semibold">
+                                    {comparisonPeriods.length === 2 && (
+                                      <>
+                                        {formatCurrency(
+                                          (comparisonData.balanceSheet[comparisonPeriods[0].label]?.totalAssets || 0) -
+                                            (comparisonData.balanceSheet[comparisonPeriods[1].label]?.totalAssets || 0)
+                                        )}
+                                      </>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                  <TableCell className="font-medium">Total Liabilities</TableCell>
+                                  {comparisonPeriods.map((period, idx) => (
+                                    <TableCell key={idx} className="text-right">
+                                      {formatCurrency(comparisonData.balanceSheet[period.label]?.totalLiabilities || 0)}
+                                    </TableCell>
+                                  ))}
+                                  <TableCell className="text-right font-semibold">
+                                    {comparisonPeriods.length === 2 && (
+                                      <>
+                                        {formatCurrency(
+                                          (comparisonData.balanceSheet[comparisonPeriods[0].label]?.totalLiabilities ||
+                                            0) -
+                                            (comparisonData.balanceSheet[comparisonPeriods[1].label]?.totalLiabilities || 0)
+                                        )}
+                                      </>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow className="bg-muted/50">
+                                  <TableCell className="font-bold">Total Equity</TableCell>
+                                  {comparisonPeriods.map((period, idx) => (
+                                    <TableCell key={idx} className="text-right font-bold">
+                                      {formatCurrency(comparisonData.balanceSheet[period.label]?.totalEquity || 0)}
+                                    </TableCell>
+                                  ))}
+                                  <TableCell className="text-right font-bold text-green-600">
+                                    {comparisonPeriods.length === 2 && (
+                                      <>
+                                        {formatCurrency(
+                                          (comparisonData.balanceSheet[comparisonPeriods[0].label]?.totalEquity || 0) -
+                                            (comparisonData.balanceSheet[comparisonPeriods[1].label]?.totalEquity || 0)
+                                        )}
+                                      </>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  )}
+
+                  {!comparisonData && (
+                    <div className="text-center py-12 text-muted-foreground">
+                      <p>Click "Generate Comparison" to compare financial statements across periods</p>
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

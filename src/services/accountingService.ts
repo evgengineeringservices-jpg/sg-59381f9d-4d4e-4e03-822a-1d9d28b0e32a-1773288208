@@ -440,6 +440,8 @@ export async function getRecurringJournalEntries() {
         balance: parseFloat(line.account.balance || 0),
         isActive: line.account.is_active,
         createdAt: line.account.created_at,
+        description: line.account.description,
+        updatedAt: line.account.updated_at,
       } : undefined,
     })),
   }));
@@ -628,6 +630,8 @@ export async function getBankReconciliations() {
       balance: parseFloat(rec.account.balance || 0),
       isActive: rec.account.is_active,
       createdAt: rec.account.created_at,
+      description: rec.account.description,
+      updatedAt: rec.account.updated_at,
     } : undefined,
     transactions: (rec.bank_transactions || []).map((t: any) => ({
       id: t.id,
