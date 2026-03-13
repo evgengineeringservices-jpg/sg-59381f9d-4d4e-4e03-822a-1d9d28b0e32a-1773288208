@@ -87,20 +87,28 @@ const adminNavItems = [
 
 export function CRMLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, loading, signOut } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
-    if (!user && router.pathname !== "/crm/login") {
+    if (!loading && !user && router.pathname !== "/crm/login") {
       router.push("/crm/login");
     }
-  }, [user, router]);
+  }, [user, loading, router]);
 
   // Close mobile menu on route change
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [router.pathname]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
 
   if (!user || !profile) {
     return null;
