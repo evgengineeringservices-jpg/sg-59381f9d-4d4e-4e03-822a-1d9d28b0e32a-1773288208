@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Download, FileText, Trash2, CheckCircle, XCircle, Clock, Filter, Calendar, Search, TrendingUp, TrendingDown, Users, DollarSign } from "lucide-react";
+import { Plus, Download, FileText, Trash2, CheckCircle, XCircle, Clock, Filter, Calendar, Search, TrendingUp, TrendingDown, Users, DollarSign, ArrowUpDown, FileSpreadsheet } from "lucide-react";
 import {
   getAccounts,
   getJournalEntries,
@@ -183,6 +183,19 @@ export default function AccountingPage() {
     balance: 0,
     description: "",
   });
+
+  const [shareholderSearch, setShareholderSearch] = useState("");
+  const [shareholderTypeFilter, setShareholderTypeFilter] = useState("all");
+  const [shareholderStatusFilter, setShareholderStatusFilter] = useState("all");
+  const [shareholderSortBy, setShareholderSortBy] = useState("name");
+  const [shareholderSortOrder, setShareholderSortOrder] = useState<"asc" | "desc">("asc");
+
+  const [dividendSearch, setDividendSearch] = useState("");
+  const [dividendTypeFilter, setDividendTypeFilter] = useState("all");
+  const [dividendStatusFilter, setDividendStatusFilter] = useState("all");
+  const [dividendYearFilter, setDividendYearFilter] = useState("all");
+  const [dividendSortBy, setDividendSortBy] = useState("dividendDate");
+  const [dividendSortOrder, setDividendSortOrder] = useState<"asc" | "desc">("desc");
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -566,6 +579,167 @@ export default function AccountingPage() {
     }
   }
 
+  const filteredAndSortedShareholders = useMemo(() => {
+    const filtered = shareholders.filter(shareholder => {
+      const matchesSearch = shareholderSearch === "" || 
+        shareholder.name.toLowerCase().includes(shareholderSearch.toLowerCase()) ||
+        (shareholder.email && shareholder.email.toLowerCase().includes(shareholderSearch.toLowerCase()));
+      const matchesType = shareholderTypeFilter === "all" || shareholder.shareholderType === shareholderTypeFilter;
+      const matchesStatus = shareholderStatusFilter === "all" || shareholder.status === shareholderStatusFilter;
+      return matchesSearch && matchesType && matchesStatus;
+    });
+
+    filtered.sort((a, b) => {
+      let aVal: any = a[shareholderSortBy as keyof typeof a];
+      let bVal: any = b[shareholderSortBy as keyof typeof b];
+      
+      if (typeof aVal === "string") aVal = aVal.toLowerCase();
+      if (typeof bVal === "string") bVal = bVal.toLowerCase();
+      
+      if (shareholderSortOrder === "asc") {
+        return aVal > bVal ? 1 : -1;
+      } else {
+        return aVal < bVal ? 1 : -1;
+      }
+    });
+
+    return filtered;
+  }, [shareholders, shareholderSearch, shareholderTypeFilter, shareholderStatusFilter, shareholderSortBy, shareholderSortOrder]);
+
+  const filteredAndSortedDividends = useMemo(() => {
+    const filtered = dividends.filter(dividend => {
+      const matchesSearch = dividendSearch === "" ||
+        dividend.notes?.toLowerCase().includes(dividendSearch.toLowerCase()) ||
+        dividend.approvedBy?.toLowerCase().includes(dividendSearch.toLowerCase());
+      const matchesType = dividendTypeFilter === "all" || dividend.dividendType === dividendTypeFilter;
+      const matchesStatus = dividendStatusFilter === "all" || dividend.status === dividendStatusFilter;
+      const matchesYear = dividendYearFilter === "all" || dividend.fiscalYear.toString() === dividendYearFilter;
+      return matchesSearch && matchesType && matchesStatus && matchesYear;
+    });
+
+    filtered.sort((a, b) => {
+      const aVal: any = a[dividendSortBy as keyof typeof a];
+      const bVal: any = b[dividendSortBy as keyof typeof b];
+      
+      if (dividendSortOrder === "asc") {
+        return aVal > bVal ? 1 : -1;
+      } else {
+        return aVal < bVal ? 1 : -1;
+      }
+    });
+
+    return filtered;
+  }, [dividends, dividendSearch, dividendTypeFilter, dividendStatusFilter, dividendYearFilter, dividendSortBy, dividendSortOrder]);
+
+  const uniqueDividendYears = useMemo(() => {
+    const years = new Set(dividends.map(d => d.fiscalYear));
+    return Array.from(years).sort((a, b) => b - a);
+  }, [dividends]);
+
+  async function exportShareholderRegistry() {
+    try {
+      const csvContent = [
+        ["Name", "Type", "Email", "Phone", "TIN", "Total Shares", "Par Value", "Total Investment", "Ownership %", "Status", "Date Joined"].join(","),
+        ...filteredAndSortedShareholders.map(s => [
+          s.name,
+          s.shareholderType,
+          s.email || "",
+          s.phone || "",
+          s.tinNumber || "",
+          s.totalShares,
+          s.parValue,
+          s.totalInvestment,
+          s.percentageOwnership.toFixed(2),
+          s.status,
+          s.dateJoined
+        ].join(","))
+      ].join("\n");
+
+      const blob = new Blob([csvContent], { type: "text/csv" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `shareholder-registry-${new Date().toISOString().split("T")[0]}.csv`;
+      a.click();
+      toast({ title: "Success", description: "Shareholder registry exported successfully" });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    }
+  }
+
+  async function exportDividendHistory() {
+    try {
+      const csvContent = [
+        ["Dividend Date", "Type", "Fiscal Year", "Quarter", "Total Amount", "Per Share", "Status", "Declaration Date", "Record Date", "Payment Date"].join(","),
+        ...filteredAndSortedDividends.map(d => [
+          d.dividendDate,
+          d.dividendType,
+          d.fiscalYear,
+          d.fiscalQuarter,
+          d.totalAmount,
+          d.perShareAmount,
+          d.status,
+          d.declarationDate,
+          d.recordDate,
+          d.paymentDate
+        ].join(","))
+      ].join("\n");
+
+      const blob = new Blob([csvContent], { type: "text/csv" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `dividend-history-${new Date().toISOString().split("T")[0]}.csv`;
+      a.click();
+      toast({ title: "Success", description: "Dividend history exported successfully" });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    }
+  }
+
+  async function exportSECReport() {
+    try {
+      const report = {
+        reportDate: new Date().toISOString().split("T")[0],
+        companyName: "Your Construction Company",
+        totalShareholders: shareholders.length,
+        totalShares: shareholders.reduce((sum, s) => sum + s.totalShares, 0),
+        totalInvestment: shareholders.reduce((sum, s) => sum + s.totalInvestment, 0),
+        shareholders: filteredAndSortedShareholders.map(s => ({
+          name: s.name,
+          type: s.shareholderType,
+          tin: s.tinNumber,
+          shares: s.totalShares,
+          ownership: s.percentageOwnership,
+          certificates: s.certificateNumbers
+        })),
+        equity: equityAccounts.map(e => ({
+          accountType: e.accountType,
+          name: e.name,
+          balance: e.balance
+        })),
+        dividends: filteredAndSortedDividends.map(d => ({
+          date: d.dividendDate,
+          type: d.dividendType,
+          amount: d.totalAmount,
+          fiscalPeriod: `Q${d.fiscalQuarter} ${d.fiscalYear}`,
+          status: d.status
+        }))
+      };
+
+      const jsonContent = JSON.stringify(report, null, 2);
+      const blob = new Blob([jsonContent], { type: "application/json" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `sec-report-${new Date().toISOString().split("T")[0]}.json`;
+      a.click();
+      toast({ title: "Success", description: "SEC report exported successfully" });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    }
+  }
+
   useEffect(() => {
     if (!comparisonData) return;
 
@@ -884,9 +1058,11 @@ export default function AccountingPage() {
                       </Table>
                     </div>
                     <div className="border-t pt-4">
-                      <div className="flex justify-between font-semibold text-lg">
+                      <div className="flex justify-between font-bold text-xl">
                         <span>Gross Profit</span>
-                        <span>{formatCurrency(statements.profitAndLoss.grossProfit)}</span>
+                        <span className={statements.profitAndLoss.grossProfit >= 0 ? "text-green-600" : "text-red-600"}>
+                          {formatCurrency(statements.profitAndLoss.grossProfit)}
+                        </span>
                       </div>
                     </div>
                     <div>
@@ -1173,16 +1349,14 @@ export default function AccountingPage() {
               <CardContent>
                 <div className="space-y-4">
                   <div className="flex items-center gap-4">
-                    <div className="flex-1">
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          placeholder="Search by description..."
-                          value={recurringSearchQuery}
-                          onChange={(e) => setRecurringSearchQuery(e.target.value)}
-                          className="pl-10"
-                        />
-                      </div>
+                    <div className="flex-1 relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search by description..."
+                        value={recurringSearchQuery}
+                        onChange={(e) => setRecurringSearchQuery(e.target.value)}
+                        className="pl-10"
+                      />
                     </div>
                     <Select value={recurringFrequencyFilter} onValueChange={setRecurringFrequencyFilter}>
                       <SelectTrigger className="w-[180px]">
@@ -1801,164 +1975,231 @@ export default function AccountingPage() {
                     <CardTitle>Shareholders Registry</CardTitle>
                     <CardDescription>Manage company shareholders and equity ownership</CardDescription>
                   </div>
-                  <Button onClick={() => { setShareholderDialogOpen(true); loadShareholders(); }}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    New Shareholder
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={exportShareholderRegistry}>
+                      <FileSpreadsheet className="h-4 w-4 mr-2" />
+                      Export CSV
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={exportSECReport}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      SEC Report
+                    </Button>
+                    <Button onClick={() => { setShareholderDialogOpen(true); loadShareholders(); }}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      New Shareholder
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Total Shares</TableHead>
-                      <TableHead>Par Value</TableHead>
-                      <TableHead>Total Investment</TableHead>
-                      <TableHead>Ownership %</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {shareholders.map((shareholder) => (
-                      <TableRow key={shareholder.id}>
-                        <TableCell className="font-medium">{shareholder.name}</TableCell>
-                        <TableCell className="capitalize">{shareholder.shareholderType}</TableCell>
-                        <TableCell>{shareholder.totalShares.toLocaleString()}</TableCell>
-                        <TableCell>{formatCurrency(shareholder.parValue)}</TableCell>
-                        <TableCell>{formatCurrency(shareholder.totalInvestment)}</TableCell>
-                        <TableCell>{shareholder.percentageOwnership.toFixed(2)}%</TableCell>
-                        <TableCell>
-                          <Badge variant={shareholder.status === "active" ? "default" : "secondary"}>
-                            {shareholder.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button size="sm" variant="outline" onClick={() => {
-                              setEditingShareholder(shareholder);
-                              setNewShareholder({
-                                name: shareholder.name,
-                                email: shareholder.email || "",
-                                phone: shareholder.phone || "",
-                                address: shareholder.address || "",
-                                tinNumber: shareholder.tinNumber || "",
-                                shareholderType: shareholder.shareholderType,
-                                totalShares: shareholder.totalShares,
-                                parValue: shareholder.parValue,
-                                totalInvestment: shareholder.totalInvestment,
-                                percentageOwnership: shareholder.percentageOwnership,
-                                certificateNumbers: shareholder.certificateNumbers ? shareholder.certificateNumbers.join(', ') : "",
-                                status: shareholder.status,
-                                dateJoined: shareholder.dateJoined,
-                                notes: shareholder.notes || "",
-                              });
-                              setShareholderDialogOpen(true);
-                            }}>Edit</Button>
-                            <Button size="sm" variant="destructive" onClick={() => handleDeleteShareholder(shareholder.id)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-
-                <Dialog open={shareholderDialogOpen} onOpenChange={setShareholderDialogOpen}>
-                  <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                    <DialogHeader>
-                      <DialogTitle>{editingShareholder ? "Edit" : "Add"} Shareholder</DialogTitle>
-                      <DialogDescription>Manage shareholder information and equity ownership</DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label>Name *</Label>
-                          <Input value={newShareholder.name} onChange={(e) => setNewShareholder({ ...newShareholder, name: e.target.value })} placeholder="Juan Dela Cruz" />
-                        </div>
-                        <div>
-                          <Label>Type</Label>
-                          <Select value={newShareholder.shareholderType} onValueChange={(value: any) => setNewShareholder({ ...newShareholder, shareholderType: value })}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="individual">Individual</SelectItem>
-                              <SelectItem value="corporate">Corporate</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label>Email</Label>
-                          <Input type="email" value={newShareholder.email} onChange={(e) => setNewShareholder({ ...newShareholder, email: e.target.value })} />
-                        </div>
-                        <div>
-                          <Label>Phone</Label>
-                          <Input value={newShareholder.phone} onChange={(e) => setNewShareholder({ ...newShareholder, phone: e.target.value })} />
-                        </div>
-                      </div>
-                      <div>
-                        <Label>Address</Label>
-                        <Input value={newShareholder.address} onChange={(e) => setNewShareholder({ ...newShareholder, address: e.target.value })} />
-                      </div>
-                      <div>
-                        <Label>TIN Number</Label>
-                        <Input value={newShareholder.tinNumber} onChange={(e) => setNewShareholder({ ...newShareholder, tinNumber: e.target.value })} placeholder="000-000-000-000" />
-                      </div>
-                      <div className="grid grid-cols-3 gap-4">
-                        <div>
-                          <Label>Total Shares *</Label>
-                          <Input type="number" value={newShareholder.totalShares} onChange={(e) => setNewShareholder({ ...newShareholder, totalShares: Number(e.target.value) })} />
-                        </div>
-                        <div>
-                          <Label>Par Value *</Label>
-                          <Input type="number" step="0.01" value={newShareholder.parValue} onChange={(e) => setNewShareholder({ ...newShareholder, parValue: Number(e.target.value) })} />
-                        </div>
-                        <div>
-                          <Label>Total Investment</Label>
-                          <Input type="number" step="0.01" value={newShareholder.totalInvestment} onChange={(e) => setNewShareholder({ ...newShareholder, totalInvestment: Number(e.target.value) })} />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label>Ownership %</Label>
-                          <Input type="number" step="0.01" value={newShareholder.percentageOwnership} onChange={(e) => setNewShareholder({ ...newShareholder, percentageOwnership: Number(e.target.value) })} />
-                        </div>
-                        <div>
-                          <Label>Certificate Numbers</Label>
-                          <Input value={newShareholder.certificateNumbers} onChange={(e) => setNewShareholder({ ...newShareholder, certificateNumbers: e.target.value })} placeholder="001, 002, 003" />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label>Status</Label>
-                          <Select value={newShareholder.status} onValueChange={(value: any) => setNewShareholder({ ...newShareholder, status: value })}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="active">Active</SelectItem>
-                              <SelectItem value="inactive">Inactive</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label>Date Joined</Label>
-                          <Input type="date" value={newShareholder.dateJoined} onChange={(e) => setNewShareholder({ ...newShareholder, dateJoined: e.target.value })} />
-                        </div>
-                      </div>
-                      <div>
-                        <Label>Notes</Label>
-                        <Input value={newShareholder.notes} onChange={(e) => setNewShareholder({ ...newShareholder, notes: e.target.value })} />
-                      </div>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1 relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search shareholders..."
+                        value={shareholderSearch}
+                        onChange={(e) => setShareholderSearch(e.target.value)}
+                        className="pl-10"
+                      />
                     </div>
-                    <DialogFooter>
-                      <Button variant="outline" onClick={() => setShareholderDialogOpen(false)}>Cancel</Button>
-                      <Button onClick={handleSaveShareholder}>Save Shareholder</Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
+                    <Select value={shareholderTypeFilter} onValueChange={setShareholderTypeFilter}>
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Types</SelectItem>
+                        <SelectItem value="individual">Individual</SelectItem>
+                        <SelectItem value="corporate">Corporate</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={shareholderStatusFilter} onValueChange={setShareholderStatusFilter}>
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="inactive">Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={shareholderSortBy} onValueChange={setShareholderSortBy}>
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Sort by" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="name">Name</SelectItem>
+                        <SelectItem value="totalShares">Shares</SelectItem>
+                        <SelectItem value="percentageOwnership">Ownership %</SelectItem>
+                        <SelectItem value="totalInvestment">Investment</SelectItem>
+                        <SelectItem value="dateJoined">Date Joined</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setShareholderSortOrder(shareholderSortOrder === "asc" ? "desc" : "asc")}
+                    >
+                      <ArrowUpDown className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  <div className="text-sm text-muted-foreground">
+                    Showing {filteredAndSortedShareholders.length} of {shareholders.length} shareholders
+                  </div>
+
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Total Shares</TableHead>
+                        <TableHead>Par Value</TableHead>
+                        <TableHead>Total Investment</TableHead>
+                        <TableHead>Ownership %</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredAndSortedShareholders.map((shareholder) => (
+                        <TableRow key={shareholder.id}>
+                          <TableCell className="font-medium">{shareholder.name}</TableCell>
+                          <TableCell className="capitalize">{shareholder.shareholderType}</TableCell>
+                          <TableCell>{shareholder.totalShares.toLocaleString()}</TableCell>
+                          <TableCell>{formatCurrency(shareholder.parValue)}</TableCell>
+                          <TableCell>{formatCurrency(shareholder.totalInvestment)}</TableCell>
+                          <TableCell>{shareholder.percentageOwnership.toFixed(2)}%</TableCell>
+                          <TableCell>
+                            <Badge variant={shareholder.status === "active" ? "default" : "secondary"}>
+                              {shareholder.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
+                              <Button size="sm" variant="outline" onClick={() => {
+                                setEditingShareholder(shareholder);
+                                setNewShareholder({
+                                  name: shareholder.name,
+                                  email: shareholder.email || "",
+                                  phone: shareholder.phone || "",
+                                  address: shareholder.address || "",
+                                  tinNumber: shareholder.tinNumber || "",
+                                  shareholderType: shareholder.shareholderType,
+                                  totalShares: shareholder.totalShares,
+                                  parValue: shareholder.parValue,
+                                  totalInvestment: shareholder.totalInvestment,
+                                  percentageOwnership: shareholder.percentageOwnership,
+                                  certificateNumbers: shareholder.certificateNumbers ? shareholder.certificateNumbers.join(', ') : "",
+                                  status: shareholder.status,
+                                  dateJoined: shareholder.dateJoined,
+                                  notes: shareholder.notes || "",
+                                });
+                                setShareholderDialogOpen(true);
+                              }}>Edit</Button>
+                              <Button size="sm" variant="destructive" onClick={() => handleDeleteShareholder(shareholder.id)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+
+                  <Dialog open={shareholderDialogOpen} onOpenChange={setShareholderDialogOpen}>
+                    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                      <DialogHeader>
+                        <DialogTitle>{editingShareholder ? "Edit" : "Add"} Shareholder</DialogTitle>
+                        <DialogDescription>Manage shareholder information and equity ownership</DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label>Name *</Label>
+                            <Input value={newShareholder.name} onChange={(e) => setNewShareholder({ ...newShareholder, name: e.target.value })} placeholder="Juan Dela Cruz" />
+                          </div>
+                          <div>
+                            <Label>Type</Label>
+                            <Select value={newShareholder.shareholderType} onValueChange={(value: any) => setNewShareholder({ ...newShareholder, shareholderType: value })}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="individual">Individual</SelectItem>
+                                <SelectItem value="corporate">Corporate</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label>Email</Label>
+                            <Input type="email" value={newShareholder.email} onChange={(e) => setNewShareholder({ ...newShareholder, email: e.target.value })} />
+                          </div>
+                          <div>
+                            <Label>Phone</Label>
+                            <Input value={newShareholder.phone} onChange={(e) => setNewShareholder({ ...newShareholder, phone: e.target.value })} />
+                          </div>
+                        </div>
+                        <div>
+                          <Label>Address</Label>
+                          <Input value={newShareholder.address} onChange={(e) => setNewShareholder({ ...newShareholder, address: e.target.value })} />
+                        </div>
+                        <div>
+                          <Label>TIN Number</Label>
+                          <Input value={newShareholder.tinNumber} onChange={(e) => setNewShareholder({ ...newShareholder, tinNumber: e.target.value })} placeholder="000-000-000-000" />
+                        </div>
+                        <div className="grid grid-cols-3 gap-4">
+                          <div>
+                            <Label>Total Shares *</Label>
+                            <Input type="number" value={newShareholder.totalShares} onChange={(e) => setNewShareholder({ ...newShareholder, totalShares: Number(e.target.value) })} />
+                          </div>
+                          <div>
+                            <Label>Par Value *</Label>
+                            <Input type="number" step="0.01" value={newShareholder.parValue} onChange={(e) => setNewShareholder({ ...newShareholder, parValue: Number(e.target.value) })} />
+                          </div>
+                          <div>
+                            <Label>Total Investment</Label>
+                            <Input type="number" step="0.01" value={newShareholder.totalInvestment} onChange={(e) => setNewShareholder({ ...newShareholder, totalInvestment: Number(e.target.value) })} />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label>Ownership %</Label>
+                            <Input type="number" step="0.01" value={newShareholder.percentageOwnership} onChange={(e) => setNewShareholder({ ...newShareholder, percentageOwnership: Number(e.target.value) })} />
+                          </div>
+                          <div>
+                            <Label>Certificate Numbers</Label>
+                            <Input value={newShareholder.certificateNumbers} onChange={(e) => setNewShareholder({ ...newShareholder, certificateNumbers: e.target.value })} placeholder="001, 002, 003" />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label>Status</Label>
+                            <Select value={newShareholder.status} onValueChange={(value: any) => setNewShareholder({ ...newShareholder, status: value })}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="active">Active</SelectItem>
+                                <SelectItem value="inactive">Inactive</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label>Date Joined</Label>
+                            <Input type="date" value={newShareholder.dateJoined} onChange={(e) => setNewShareholder({ ...newShareholder, dateJoined: e.target.value })} />
+                          </div>
+                        </div>
+                        <div>
+                          <Label>Notes</Label>
+                          <Input value={newShareholder.notes} onChange={(e) => setNewShareholder({ ...newShareholder, notes: e.target.value })} />
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button variant="outline" onClick={() => setShareholderDialogOpen(false)}>Cancel</Button>
+                        <Button onClick={handleSaveShareholder}>Save Shareholder</Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -1971,170 +2212,246 @@ export default function AccountingPage() {
                     <CardTitle>Dividend Management</CardTitle>
                     <CardDescription>Declare and track dividend distributions to shareholders</CardDescription>
                   </div>
-                  <Button onClick={() => { setDividendDialogOpen(true); loadDividends(); loadShareholders(); }}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Declare Dividend
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={exportDividendHistory}>
+                      <FileSpreadsheet className="h-4 w-4 mr-2" />
+                      Export CSV
+                    </Button>
+                    <Button onClick={() => { setDividendDialogOpen(true); loadDividends(); loadShareholders(); }}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Declare Dividend
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Dividend Date</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Fiscal Period</TableHead>
-                      <TableHead>Total Amount</TableHead>
-                      <TableHead>Per Share</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {dividends.map((dividend) => (
-                      <TableRow key={dividend.id}>
-                        <TableCell>{new Date(dividend.dividendDate).toLocaleDateString()}</TableCell>
-                        <TableCell className="capitalize">{dividend.dividendType}</TableCell>
-                        <TableCell>Q{dividend.fiscalQuarter} {dividend.fiscalYear}</TableCell>
-                        <TableCell>{formatCurrency(dividend.totalAmount)}</TableCell>
-                        <TableCell>{formatCurrency(dividend.perShareAmount)}</TableCell>
-                        <TableCell>
-                          <Badge variant={dividend.status === "paid" ? "default" : dividend.status === "approved" ? "secondary" : "outline"}>
-                            {dividend.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button size="sm" variant="outline" onClick={() => {
-                              setEditingDividend(dividend);
-                              setNewDividend({
-                                dividendDate: dividend.dividendDate,
-                                declarationDate: dividend.declarationDate,
-                                recordDate: dividend.recordDate,
-                                paymentDate: dividend.paymentDate,
-                                dividendType: dividend.dividendType,
-                                totalAmount: dividend.totalAmount,
-                                perShareAmount: dividend.perShareAmount,
-                                fiscalYear: dividend.fiscalYear,
-                                fiscalQuarter: dividend.fiscalQuarter,
-                                status: dividend.status,
-                                approvedBy: dividend.approvedBy || "",
-                                paidBy: dividend.paidBy || "",
-                                notes: dividend.notes || "",
-                              });
-                              setDividendDialogOpen(true);
-                            }}>View</Button>
-                            <Button size="sm" variant="destructive" onClick={() => handleDeleteDividend(dividend.id)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-
-                <Dialog open={dividendDialogOpen} onOpenChange={setDividendDialogOpen}>
-                  <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                    <DialogHeader>
-                      <DialogTitle>{editingDividend ? "Edit" : "Declare"} Dividend</DialogTitle>
-                      <DialogDescription>Manage dividend declaration and payment schedule</DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label>Dividend Type</Label>
-                          <Select value={newDividend.dividendType} onValueChange={(value: any) => setNewDividend({ ...newDividend, dividendType: value })}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="cash">Cash Dividend</SelectItem>
-                              <SelectItem value="stock">Stock Dividend</SelectItem>
-                              <SelectItem value="property">Property Dividend</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label>Status</Label>
-                          <Select value={newDividend.status} onValueChange={(value: any) => setNewDividend({ ...newDividend, status: value })}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="declared">Declared</SelectItem>
-                              <SelectItem value="approved">Approved</SelectItem>
-                              <SelectItem value="paid">Paid</SelectItem>
-                              <SelectItem value="cancelled">Cancelled</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label>Declaration Date</Label>
-                          <Input type="date" value={newDividend.declarationDate} onChange={(e) => setNewDividend({ ...newDividend, declarationDate: e.target.value })} />
-                        </div>
-                        <div>
-                          <Label>Record Date</Label>
-                          <Input type="date" value={newDividend.recordDate} onChange={(e) => setNewDividend({ ...newDividend, recordDate: e.target.value })} />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label>Payment Date</Label>
-                          <Input type="date" value={newDividend.paymentDate} onChange={(e) => setNewDividend({ ...newDividend, paymentDate: e.target.value })} />
-                        </div>
-                        <div>
-                          <Label>Dividend Date</Label>
-                          <Input type="date" value={newDividend.dividendDate} onChange={(e) => setNewDividend({ ...newDividend, dividendDate: e.target.value })} />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label>Fiscal Year</Label>
-                          <Input type="number" value={newDividend.fiscalYear} onChange={(e) => setNewDividend({ ...newDividend, fiscalYear: Number(e.target.value) })} />
-                        </div>
-                        <div>
-                          <Label>Fiscal Quarter</Label>
-                          <Select value={newDividend.fiscalQuarter.toString()} onValueChange={(value) => setNewDividend({ ...newDividend, fiscalQuarter: Number(value) })}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="1">Q1</SelectItem>
-                              <SelectItem value="2">Q2</SelectItem>
-                              <SelectItem value="3">Q3</SelectItem>
-                              <SelectItem value="4">Q4</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label>Per Share Amount</Label>
-                          <Input type="number" step="0.01" value={newDividend.perShareAmount} onChange={(e) => setNewDividend({ ...newDividend, perShareAmount: Number(e.target.value) })} />
-                        </div>
-                        <div>
-                          <Label>Total Amount</Label>
-                          <Input type="number" step="0.01" value={newDividend.totalAmount} onChange={(e) => setNewDividend({ ...newDividend, totalAmount: Number(e.target.value) })} />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label>Approved By</Label>
-                          <Input value={newDividend.approvedBy} onChange={(e) => setNewDividend({ ...newDividend, approvedBy: e.target.value })} placeholder="Board Resolution No." />
-                        </div>
-                        <div>
-                          <Label>Paid By</Label>
-                          <Input value={newDividend.paidBy} onChange={(e) => setNewDividend({ ...newDividend, paidBy: e.target.value })} placeholder="Check/Transfer No." />
-                        </div>
-                      </div>
-                      <div>
-                        <Label>Notes</Label>
-                        <Input value={newDividend.notes} onChange={(e) => setNewDividend({ ...newDividend, notes: e.target.value })} />
-                      </div>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1 relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search dividends..."
+                        value={dividendSearch}
+                        onChange={(e) => setDividendSearch(e.target.value)}
+                        className="pl-10"
+                      />
                     </div>
-                    <DialogFooter>
-                      <Button variant="outline" onClick={() => setDividendDialogOpen(false)}>Cancel</Button>
-                      <Button onClick={handleSaveDividend}>Save Dividend</Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
+                    <Select value={dividendTypeFilter} onValueChange={setDividendTypeFilter}>
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Types</SelectItem>
+                        <SelectItem value="cash">Cash</SelectItem>
+                        <SelectItem value="stock">Stock</SelectItem>
+                        <SelectItem value="property">Property</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={dividendStatusFilter} onValueChange={setDividendStatusFilter}>
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="declared">Declared</SelectItem>
+                        <SelectItem value="approved">Approved</SelectItem>
+                        <SelectItem value="paid">Paid</SelectItem>
+                        <SelectItem value="cancelled">Cancelled</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={dividendYearFilter} onValueChange={setDividendYearFilter}>
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Year" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Years</SelectItem>
+                        {uniqueDividendYears.map(year => (
+                          <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={dividendSortBy} onValueChange={setDividendSortBy}>
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Sort by" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="dividendDate">Date</SelectItem>
+                        <SelectItem value="totalAmount">Amount</SelectItem>
+                        <SelectItem value="fiscalYear">Year</SelectItem>
+                        <SelectItem value="status">Status</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setDividendSortOrder(dividendSortOrder === "asc" ? "desc" : "asc")}
+                    >
+                      <ArrowUpDown className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  <div className="text-sm text-muted-foreground">
+                    Showing {filteredAndSortedDividends.length} of {dividends.length} dividends
+                  </div>
+
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Dividend Date</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Fiscal Period</TableHead>
+                        <TableHead>Total Amount</TableHead>
+                        <TableHead>Per Share</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredAndSortedDividends.map((dividend) => (
+                        <TableRow key={dividend.id}>
+                          <TableCell>{new Date(dividend.dividendDate).toLocaleDateString()}</TableCell>
+                          <TableCell className="capitalize">{dividend.dividendType}</TableCell>
+                          <TableCell>Q{dividend.fiscalQuarter} {dividend.fiscalYear}</TableCell>
+                          <TableCell>{formatCurrency(dividend.totalAmount)}</TableCell>
+                          <TableCell>{formatCurrency(dividend.perShareAmount)}</TableCell>
+                          <TableCell>
+                            <Badge variant={dividend.status === "paid" ? "default" : dividend.status === "approved" ? "secondary" : "outline"}>
+                              {dividend.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
+                              <Button size="sm" variant="outline" onClick={() => {
+                                setEditingDividend(dividend);
+                                setNewDividend({
+                                  dividendDate: dividend.dividendDate,
+                                  declarationDate: dividend.declarationDate,
+                                  recordDate: dividend.recordDate,
+                                  paymentDate: dividend.paymentDate,
+                                  dividendType: dividend.dividendType,
+                                  totalAmount: dividend.totalAmount,
+                                  perShareAmount: dividend.perShareAmount,
+                                  fiscalYear: dividend.fiscalYear,
+                                  fiscalQuarter: dividend.fiscalQuarter,
+                                  status: dividend.status,
+                                  approvedBy: dividend.approvedBy || "",
+                                  paidBy: dividend.paidBy || "",
+                                  notes: dividend.notes || "",
+                                });
+                                setDividendDialogOpen(true);
+                              }}>View</Button>
+                              <Button size="sm" variant="destructive" onClick={() => handleDeleteDividend(dividend.id)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+
+                  <Dialog open={dividendDialogOpen} onOpenChange={setDividendDialogOpen}>
+                    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                      <DialogHeader>
+                        <DialogTitle>{editingDividend ? "Edit" : "Declare"} Dividend</DialogTitle>
+                        <DialogDescription>Manage dividend declaration and payment schedule</DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label>Dividend Type</Label>
+                            <Select value={newDividend.dividendType} onValueChange={(value: any) => setNewDividend({ ...newDividend, dividendType: value })}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="cash">Cash Dividend</SelectItem>
+                                <SelectItem value="stock">Stock Dividend</SelectItem>
+                                <SelectItem value="property">Property Dividend</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label>Status</Label>
+                            <Select value={newDividend.status} onValueChange={(value: any) => setNewDividend({ ...newDividend, status: value })}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="declared">Declared</SelectItem>
+                                <SelectItem value="approved">Approved</SelectItem>
+                                <SelectItem value="paid">Paid</SelectItem>
+                                <SelectItem value="cancelled">Cancelled</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label>Declaration Date</Label>
+                            <Input type="date" value={newDividend.declarationDate} onChange={(e) => setNewDividend({ ...newDividend, declarationDate: e.target.value })} />
+                          </div>
+                          <div>
+                            <Label>Record Date</Label>
+                            <Input type="date" value={newDividend.recordDate} onChange={(e) => setNewDividend({ ...newDividend, recordDate: e.target.value })} />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label>Payment Date</Label>
+                            <Input type="date" value={newDividend.paymentDate} onChange={(e) => setNewDividend({ ...newDividend, paymentDate: e.target.value })} />
+                          </div>
+                          <div>
+                            <Label>Dividend Date</Label>
+                            <Input type="date" value={newDividend.dividendDate} onChange={(e) => setNewDividend({ ...newDividend, dividendDate: e.target.value })} />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label>Fiscal Year</Label>
+                            <Input type="number" value={newDividend.fiscalYear} onChange={(e) => setNewDividend({ ...newDividend, fiscalYear: Number(e.target.value) })} />
+                          </div>
+                          <div>
+                            <Label>Fiscal Quarter</Label>
+                            <Select value={newDividend.fiscalQuarter.toString()} onValueChange={(value) => setNewDividend({ ...newDividend, fiscalQuarter: Number(value) })}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="1">Q1</SelectItem>
+                                <SelectItem value="2">Q2</SelectItem>
+                                <SelectItem value="3">Q3</SelectItem>
+                                <SelectItem value="4">Q4</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label>Per Share Amount</Label>
+                            <Input type="number" step="0.01" value={newDividend.perShareAmount} onChange={(e) => setNewDividend({ ...newDividend, perShareAmount: Number(e.target.value) })} />
+                          </div>
+                          <div>
+                            <Label>Total Amount</Label>
+                            <Input type="number" step="0.01" value={newDividend.totalAmount} onChange={(e) => setNewDividend({ ...newDividend, totalAmount: Number(e.target.value) })} />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label>Approved By</Label>
+                            <Input value={newDividend.approvedBy} onChange={(e) => setNewDividend({ ...newDividend, approvedBy: e.target.value })} placeholder="Board Resolution No." />
+                          </div>
+                          <div>
+                            <Label>Paid By</Label>
+                            <Input value={newDividend.paidBy} onChange={(e) => setNewDividend({ ...newDividend, paidBy: e.target.value })} placeholder="Check/Transfer No." />
+                          </div>
+                        </div>
+                        <div>
+                          <Label>Notes</Label>
+                          <Input value={newDividend.notes} onChange={(e) => setNewDividend({ ...newDividend, notes: e.target.value })} />
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button variant="outline" onClick={() => setDividendDialogOpen(false)}>Cancel</Button>
+                        <Button onClick={handleSaveDividend}>Save Dividend</Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
