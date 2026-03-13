@@ -140,13 +140,13 @@ export interface Account {
 
 export interface JournalEntry {
   id: string;
-  projectId: string | null;
+  projectId?: string;
   date: string;
   referenceNo: string;
   description: string;
   status: "draft" | "posted";
   createdAt: string;
-  updatedAt: string;
+  createdBy?: string;
   lines?: JournalLine[];
 }
 
@@ -159,6 +159,86 @@ export interface JournalLine {
   credit: number;
   createdAt: string;
   account?: Account;
+}
+
+export interface RecurringJournalEntry {
+  id: string;
+  projectId?: string;
+  description: string;
+  frequency: "daily" | "weekly" | "monthly" | "quarterly" | "yearly";
+  startDate: string;
+  endDate?: string;
+  nextOccurrence: string;
+  isActive: boolean;
+  createdAt: string;
+  createdBy?: string;
+  lines?: RecurringJournalLine[];
+}
+
+export interface RecurringJournalLine {
+  id: string;
+  recurringEntryId: string;
+  accountId: string;
+  description?: string;
+  debit: number;
+  credit: number;
+  account?: Account;
+}
+
+export interface BankReconciliation {
+  id: string;
+  accountId: string;
+  statementDate: string;
+  statementBalance: number;
+  bookBalance: number;
+  reconciledBalance?: number;
+  status: "in_progress" | "completed" | "reviewed";
+  notes?: string;
+  createdAt: string;
+  createdBy?: string;
+  completedAt?: string;
+  transactions?: BankTransaction[];
+  account?: Account;
+}
+
+export interface BankTransaction {
+  id: string;
+  reconciliationId: string;
+  transactionDate: string;
+  description: string;
+  referenceNo?: string;
+  debit: number;
+  credit: number;
+  isMatched: boolean;
+  matchedJournalEntryId?: string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface FinancialPeriod {
+  startDate: string;
+  endDate: string;
+  label: string;
+}
+
+export interface PeriodComparison {
+  periods: FinancialPeriod[];
+  profitAndLoss: {
+    [key: string]: {
+      revenue: number;
+      cogs: number;
+      grossProfit: number;
+      expenses: number;
+      netIncome: number;
+    };
+  };
+  balanceSheet: {
+    [key: string]: {
+      totalAssets: number;
+      totalLiabilities: number;
+      totalEquity: number;
+    };
+  };
 }
 
 // Database entities

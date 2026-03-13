@@ -81,6 +81,120 @@ export type Database = {
         }
         Relationships: []
       }
+      bank_reconciliations: {
+        Row: {
+          account_id: string | null
+          book_balance: number
+          completed_at: string | null
+          created_at: string | null
+          created_by: string | null
+          id: string
+          notes: string | null
+          reconciled_balance: number | null
+          statement_balance: number
+          statement_date: string
+          status: string | null
+        }
+        Insert: {
+          account_id?: string | null
+          book_balance: number
+          completed_at?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          reconciled_balance?: number | null
+          statement_balance: number
+          statement_date: string
+          status?: string | null
+        }
+        Update: {
+          account_id?: string | null
+          book_balance?: number
+          completed_at?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          reconciled_balance?: number | null
+          statement_balance?: number
+          statement_date?: string
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bank_reconciliations_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_reconciliations_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bank_transactions: {
+        Row: {
+          created_at: string | null
+          credit: number | null
+          debit: number | null
+          description: string
+          id: string
+          is_matched: boolean | null
+          matched_journal_entry_id: string | null
+          notes: string | null
+          reconciliation_id: string | null
+          reference_no: string | null
+          transaction_date: string
+        }
+        Insert: {
+          created_at?: string | null
+          credit?: number | null
+          debit?: number | null
+          description: string
+          id?: string
+          is_matched?: boolean | null
+          matched_journal_entry_id?: string | null
+          notes?: string | null
+          reconciliation_id?: string | null
+          reference_no?: string | null
+          transaction_date: string
+        }
+        Update: {
+          created_at?: string | null
+          credit?: number | null
+          debit?: number | null
+          description?: string
+          id?: string
+          is_matched?: boolean | null
+          matched_journal_entry_id?: string | null
+          notes?: string | null
+          reconciliation_id?: string | null
+          reference_no?: string | null
+          transaction_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bank_transactions_matched_journal_entry_id_fkey"
+            columns: ["matched_journal_entry_id"]
+            isOneToOne: false
+            referencedRelation: "journal_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_transactions_reconciliation_id_fkey"
+            columns: ["reconciliation_id"]
+            isOneToOne: false
+            referencedRelation: "bank_reconciliations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       billing_items: {
         Row: {
           amount: number
@@ -794,6 +908,102 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      recurring_journal_entries: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          description: string
+          end_date: string | null
+          frequency: string
+          id: string
+          is_active: boolean | null
+          next_occurrence: string
+          project_id: string | null
+          start_date: string
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          description: string
+          end_date?: string | null
+          frequency: string
+          id?: string
+          is_active?: boolean | null
+          next_occurrence: string
+          project_id?: string | null
+          start_date: string
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          description?: string
+          end_date?: string | null
+          frequency?: string
+          id?: string
+          is_active?: boolean | null
+          next_occurrence?: string
+          project_id?: string | null
+          start_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_journal_entries_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_journal_entries_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recurring_journal_lines: {
+        Row: {
+          account_id: string | null
+          credit: number | null
+          debit: number | null
+          description: string | null
+          id: string
+          recurring_entry_id: string | null
+        }
+        Insert: {
+          account_id?: string | null
+          credit?: number | null
+          debit?: number | null
+          description?: string | null
+          id?: string
+          recurring_entry_id?: string | null
+        }
+        Update: {
+          account_id?: string | null
+          credit?: number | null
+          debit?: number | null
+          description?: string | null
+          id?: string
+          recurring_entry_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_journal_lines_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_journal_lines_recurring_entry_id_fkey"
+            columns: ["recurring_entry_id"]
+            isOneToOne: false
+            referencedRelation: "recurring_journal_entries"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tasks: {
         Row: {

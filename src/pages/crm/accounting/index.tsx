@@ -11,6 +11,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import type {
+  Account,
+  JournalEntry,
+  JournalLine,
+  RecurringJournalEntry,
+  RecurringJournalLine,
+  BankReconciliation,
+  BankTransaction,
+  FinancialPeriod,
+  Project,
+} from "@/types";
 import {
   getAccounts,
   getJournalEntries,
@@ -18,9 +29,18 @@ import {
   postJournalEntry,
   getAccountsReceivableAging,
   getAccountsPayableAging,
+  getRecurringJournalEntries,
+  createRecurringJournalEntry,
+  updateRecurringJournalEntry,
+  deleteRecurringJournalEntry,
+  generateJournalEntriesFromRecurring,
+  getBankReconciliations,
+  createBankReconciliation,
+  updateBankReconciliation,
+  updateBankTransaction,
+  getFinancialStatementComparison,
 } from "@/services/accountingService";
 import { getProjects } from "@/services/crmService";
-import type { Account, JournalEntry, Project } from "@/types";
 import { Plus, Calculator, Landmark, BookOpen, CheckCircle2, Trash2, RefreshCw, FileText, FileSpreadsheet } from "lucide-react";
 import { format } from "date-fns";
 
@@ -50,6 +70,46 @@ export default function AccountingPage() {
   const [balanceSheet, setBalanceSheet] = useState<any>(null);
   const [arAging, setArAging] = useState<any>(null);
   const [apAging, setApAging] = useState<any>(null);
+
+  // Recurring entries state
+  const [recurringEntries, setRecurringEntries] = useState<RecurringJournalEntry[]>([]);
+  const [recurringDialogOpen, setRecurringDialogOpen] = useState(false);
+  const [editingRecurring, setEditingRecurring] = useState<RecurringJournalEntry | null>(null);
+  const [recurringFormData, setRecurringFormData] = useState({
+    description: "",
+    frequency: "monthly" as "daily" | "weekly" | "monthly" | "quarterly" | "yearly",
+    startDate: new Date().toISOString().split("T")[0],
+    endDate: "",
+    projectId: "",
+  });
+  const [recurringLines, setRecurringLines] = useState<Omit<RecurringJournalLine, "id" | "recurringEntryId">[]>([]);
+
+  // Bank reconciliation state
+  const [reconciliations, setReconciliations] = useState<BankReconciliation[]>([]);
+  const [reconciliationDialogOpen, setReconciliationDialogOpen] = useState(false);
+  const [editingReconciliation, setEditingReconciliation] = useState<BankReconciliation | null>(null);
+  const [reconciliationFormData, setReconciliationFormData] = useState({
+    accountId: "",
+    statementDate: new Date().toISOString().split("T")[0],
+    statementBalance: 0,
+    bookBalance: 0,
+  });
+  const [bankTransactions, setBankTransactions] = useState<Omit<BankTransaction, "id" | "reconciliationId" | "createdAt">[]>([]);
+
+  // Period comparison state
+  const [comparisonPeriods, setComparisonPeriods] = useState<FinancialPeriod[]>([
+    {
+      startDate: new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0],
+      endDate: new Date(new Date().getFullYear(), 11, 31).toISOString().split("T")[0],
+      label: "Current Year",
+    },
+    {
+      startDate: new Date(new Date().getFullYear() - 1, 0, 1).toISOString().split("T")[0],
+      endDate: new Date(new Date().getFullYear() - 1, 11, 31).toISOString().split("T")[0],
+      label: "Previous Year",
+    },
+  ]);
+  const [comparisonData, setComparisonData] = useState<any>(null);
 
   useEffect(() => {
     loadData();
@@ -770,7 +830,7 @@ export default function AccountingPage() {
                   </div>
 
                   <div className="flex justify-between items-end border-t-2 border-primary pt-3 px-2 mt-4">
-                    <span className="font-bold text-xl uppercase tracking-wider">Net Income</span>
+                    <span className="font-bold text-sm uppercase">Net Income</span>
                     <span className={`font-bold text-xl ${statements.netIncome >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                       {formatCurrency(statements.netIncome)}
                     </span>
