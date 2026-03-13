@@ -16,7 +16,7 @@ export async function getAccounts(): Promise<Account[]> {
     type: account.type as any,
     category: account.category,
     description: account.description,
-    balance: account.balance ? parseFloat(account.balance) : 0,
+    balance: (account as any).balance ? parseFloat((account as any).balance) : 0,
     createdAt: account.created_at,
     updatedAt: account.updated_at
   }));
@@ -61,7 +61,7 @@ export async function getJournalEntries(): Promise<JournalEntry[]> {
         type: line.account.type as any,
         category: line.account.category,
         description: line.account.description,
-        balance: line.account.balance ? parseFloat(line.account.balance) : 0,
+        balance: (line.account as any).balance ? parseFloat((line.account as any).balance) : 0,
         createdAt: line.account.created_at,
         updatedAt: line.account.updated_at
       } : undefined
