@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Receipt, Calendar, Edit, Trash2, FileSpreadsheet, Printer } from "lucide-react";
 import { getBillingItems, createBillingItem, updateBillingItem, deleteBillingItem, getProjects } from "@/services/crmService";
+import { generateJournalEntryFromBilling } from "@/services/accountingService";
 import { BILLING_TYPES, BILLING_STATUSES, formatPeso, PH_VAT_RATE, PH_EWT_RATE, PH_RETENTION_RATE, calculateBilling } from "@/constants";
 import type { BillingItem, Project, BillingType, BillingStatus } from "@/types";
 import { format } from "date-fns";
@@ -145,6 +146,32 @@ export default function BillingPage() {
       return;
     }
     printElement("billing-list", "BILLING STATEMENT");
+  };
+
+  const handleUpdateStatus = async (id: string, newStatus: string) => {
+    try {
+      await updateBillingItem(id, { status: newStatus as BillingStatus });
+      
+      // Auto-generate journal entry if posting the invoice
+      if (newStatus === "approved" || newStatus === "paid") {
+        try {
+          await generateJournalEntryFromBilling(id);
+          toast({
+            title: "Journal Entry Created",
+            description: "Automatically generated accounting journal entry for this billing.",
+          });
+        } catch (jeError) {
+          console.error("Failed to generate journal entry:", jeError);
+          // Don't fail the whole operation if just the JE generation fails
+        }
+      }
+
+      toast({
+        title: "Status Updated",
+      });
+    } catch (error) {
+      console.error("Error updating status:", error);
+    }
   };
 
   const filteredItems = billingItems;

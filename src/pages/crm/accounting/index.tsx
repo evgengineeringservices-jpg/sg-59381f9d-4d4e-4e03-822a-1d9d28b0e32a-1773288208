@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { CRMLayout } from "@/components/layout/CRMLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,10 +11,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { getAccounts, getJournalEntries, createJournalEntry, postJournalEntry } from "@/services/accountingService";
+import {
+  getAccounts,
+  getJournalEntries,
+  createJournalEntry,
+  postJournalEntry,
+  getAccountsReceivableAging,
+  getAccountsPayableAging,
+} from "@/services/accountingService";
 import { getProjects } from "@/services/crmService";
 import type { Account, JournalEntry, Project } from "@/types";
-import { Plus, Calculator, Landmark, BookOpen, CheckCircle2, Trash2 } from "lucide-react";
+import { Plus, Calculator, Landmark, BookOpen, CheckCircle2, Trash2, RefreshCw, FileText, FileSpreadsheet } from "lucide-react";
 import { format } from "date-fns";
 
 export default function AccountingPage() {
@@ -39,6 +46,10 @@ export default function AccountingPage() {
     { accountId: "", description: "", debit: 0, credit: 0 },
     { accountId: "", description: "", debit: 0, credit: 0 },
   ]);
+
+  const [balanceSheet, setBalanceSheet] = useState<any>(null);
+  const [arAging, setArAging] = useState<any>(null);
+  const [apAging, setApAging] = useState<any>(null);
 
   useEffect(() => {
     loadData();
@@ -179,7 +190,337 @@ export default function AccountingPage() {
     };
   }, [entries, accounts]);
 
+  const derivedProfitAndLoss = useMemo(() => {
+    const revenueAccs = accounts.filter(a => a.type === 'revenue' && (statements.balances[a.id] || 0) !== 0).map(a => ({ accountName: a.name, balance: statements.balances[a.id] || 0 }));
+    const cogsAccs = accounts.filter(a => a.type === 'expense' && a.category.includes('Direct') && (statements.balances[a.id] || 0) !== 0).map(a => ({ accountName: a.name, balance: statements.balances[a.id] || 0 }));
+    const expAccs = accounts.filter(a => a.type === 'expense' && a.category.includes('Overhead') && (statements.balances[a.id] || 0) !== 0).map(a => ({ accountName: a.name, balance: statements.balances[a.id] || 0 }));
+    
+    return {
+      revenue: revenueAccs,
+      totalRevenue: statements.revenue,
+      cogs: cogsAccs,
+      totalCogs: statements.directCosts,
+      grossProfit: statements.grossProfit,
+      grossMargin: statements.revenue > 0 ? (statements.grossProfit / statements.revenue) * 100 : 0,
+      expenses: expAccs,
+      totalExpenses: statements.overhead,
+      netIncome: statements.netIncome,
+      netMargin: statements.revenue > 0 ? (statements.netIncome / statements.revenue) * 100 : 0,
+    };
+  }, [statements, accounts]);
+
+  const derivedBalanceSheet = useMemo(() => {
+    const currentAssets = accounts.filter(a => a.type === 'asset' && !a.name.includes('Property') && !a.name.includes('Equipment') && !a.name.includes('Accumulated') && (statements.balances[a.id] || 0) !== 0).map(a => ({ accountName: a.name, balance: statements.balances[a.id] || 0 }));
+    const nonCurrentAssets = accounts.filter(a => a.type === 'asset' && (a.name.includes('Property') || a.name.includes('Equipment') || a.name.includes('Accumulated')) && (statements.balances[a.id] || 0) !== 0).map(a => ({ accountName: a.name, balance: statements.balances[a.id] || 0 }));
+    const currentLiabilities = accounts.filter(a => a.type === 'liability' && !a.name.includes('Long-term') && !a.name.includes('Retention') && (statements.balances[a.id] || 0) !== 0).map(a => ({ accountName: a.name, balance: statements.balances[a.id] || 0 }));
+    const longTermLiabilities = accounts.filter(a => a.type === 'liability' && (a.name.includes('Long-term') || a.name.includes('Retention')) && (statements.balances[a.id] || 0) !== 0).map(a => ({ accountName: a.name, balance: statements.balances[a.id] || 0 }));
+    const equityAccs = accounts.filter(a => a.type === 'equity' && (statements.balances[a.id] || 0) !== 0).map(a => ({ accountName: a.name, balance: statements.balances[a.id] || 0 }));
+    
+    if (statements.netIncome !== 0) {
+       equityAccs.push({ accountName: "Current Year Earnings", balance: statements.netIncome });
+    }
+
+    return {
+      currentAssets,
+      totalCurrentAssets: currentAssets.reduce((sum, a) => sum + a.balance, 0),
+      nonCurrentAssets,
+      totalNonCurrentAssets: nonCurrentAssets.reduce((sum, a) => sum + a.balance, 0),
+      totalAssets: statements.assets,
+      currentLiabilities,
+      totalCurrentLiabilities: currentLiabilities.reduce((sum, a) => sum + a.balance, 0),
+      longTermLiabilities,
+      totalLongTermLiabilities: longTermLiabilities.reduce((sum, a) => sum + a.balance, 0),
+      totalLiabilities: statements.liabilities,
+      equity: equityAccs,
+      totalEquity: statements.totalEquity,
+      totalLiabilitiesAndEquity: statements.liabilities + statements.totalEquity
+    };
+  }, [statements, accounts]);
+
   const formatCurrency = (val: number) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(val);
+
+  async function loadARAgingReport() {
+    try {
+      const data = await getAccountsReceivableAging();
+      setArAging(data);
+    } catch (error) {
+      console.error(error);
+      toast({ title: "Error", description: "Failed to load AR aging", variant: "destructive" });
+    }
+  }
+
+  async function loadAPAgingReport() {
+    try {
+      const data = await getAccountsPayableAging();
+      setApAging(data);
+    } catch (error) {
+      console.error(error);
+      toast({ title: "Error", description: "Failed to load AP aging", variant: "destructive" });
+    }
+  }
+
+  async function exportProfitAndLossToPDF() {
+    const { jsPDF } = await import("jspdf");
+    await import("jspdf-autotable");
+    const doc = new jsPDF() as any;
+    
+    doc.setFontSize(18);
+    doc.text("PROFIT & LOSS STATEMENT", 105, 20, { align: "center" });
+    doc.setFontSize(11);
+    doc.text("Construction Company", 105, 28, { align: "center" });
+    doc.text(`Period: ${format(new Date(), "MMMM d, yyyy")}`, 105, 35, { align: "center" });
+    
+    let yPos = 50;
+    doc.setFontSize(12);
+    doc.setFont(undefined, "bold");
+    doc.text("REVENUE", 14, yPos);
+    yPos += 7;
+    doc.setFontSize(10);
+    doc.setFont(undefined, "normal");
+    derivedProfitAndLoss.revenue.forEach((item: any) => {
+      doc.text(`  ${item.accountName}`, 14, yPos);
+      doc.text(formatCurrency(item.balance), 195, yPos, { align: "right" });
+      yPos += 6;
+    });
+    doc.setFont(undefined, "bold");
+    doc.text("TOTAL REVENUE", 14, yPos);
+    doc.text(formatCurrency(derivedProfitAndLoss.totalRevenue), 195, yPos, { align: "right" });
+    yPos += 10;
+    
+    doc.text("COST OF GOODS SOLD", 14, yPos);
+    yPos += 7;
+    doc.setFont(undefined, "normal");
+    derivedProfitAndLoss.cogs.forEach((item: any) => {
+      doc.text(`  ${item.accountName}`, 14, yPos);
+      doc.text(formatCurrency(item.balance), 195, yPos, { align: "right" });
+      yPos += 6;
+    });
+    doc.setFont(undefined, "bold");
+    doc.text("TOTAL COGS", 14, yPos);
+    doc.text(formatCurrency(derivedProfitAndLoss.totalCogs), 195, yPos, { align: "right" });
+    yPos += 8;
+    
+    doc.setFontSize(12);
+    doc.text("GROSS PROFIT", 14, yPos);
+    doc.text(formatCurrency(derivedProfitAndLoss.grossProfit), 195, yPos, { align: "right" });
+    yPos += 6;
+    doc.setFont(undefined, "normal");
+    doc.text(`GROSS MARGIN: ${derivedProfitAndLoss.grossMargin.toFixed(2)}%`, 14, yPos);
+    yPos += 10;
+    
+    doc.setFontSize(12);
+    doc.setFont(undefined, "bold");
+    doc.text("OPERATING EXPENSES", 14, yPos);
+    yPos += 7;
+    doc.setFontSize(10);
+    doc.setFont(undefined, "normal");
+    derivedProfitAndLoss.expenses.forEach((item: any) => {
+      doc.text(`  ${item.accountName}`, 14, yPos);
+      doc.text(formatCurrency(item.balance), 195, yPos, { align: "right" });
+      yPos += 6;
+    });
+    doc.setFont(undefined, "bold");
+    doc.text("TOTAL OPERATING EXPENSES", 14, yPos);
+    doc.text(formatCurrency(derivedProfitAndLoss.totalExpenses), 195, yPos, { align: "right" });
+    yPos += 10;
+    
+    doc.setFontSize(12);
+    doc.text("NET INCOME", 14, yPos);
+    doc.text(formatCurrency(derivedProfitAndLoss.netIncome), 195, yPos, { align: "right" });
+    yPos += 6;
+    doc.setFont(undefined, "normal");
+    doc.text(`NET MARGIN: ${derivedProfitAndLoss.netMargin.toFixed(2)}%`, 14, yPos);
+    
+    doc.save(`profit-and-loss-${format(new Date(), "yyyy-MM-dd")}.pdf`);
+    toast({ title: "Success", description: "Profit & Loss exported to PDF successfully." });
+  }
+
+  async function exportProfitAndLossToExcel() {
+    const XLSX = await import("xlsx");
+    const data = [
+      ["PROFIT & LOSS STATEMENT"],
+      ["Construction Company"],
+      [`Period: ${format(new Date(), "MMMM d, yyyy")}`],
+      [],
+      ["REVENUE"],
+      ...derivedProfitAndLoss.revenue.map((item: any) => [`  ${item.accountName}`, item.balance]),
+      ["TOTAL REVENUE", derivedProfitAndLoss.totalRevenue],
+      [],
+      ["COST OF GOODS SOLD"],
+      ...derivedProfitAndLoss.cogs.map((item: any) => [`  ${item.accountName}`, item.balance]),
+      ["TOTAL COGS", derivedProfitAndLoss.totalCogs],
+      [],
+      ["GROSS PROFIT", derivedProfitAndLoss.grossProfit],
+      [`GROSS MARGIN`, `${derivedProfitAndLoss.grossMargin.toFixed(2)}%`],
+      [],
+      ["OPERATING EXPENSES"],
+      ...derivedProfitAndLoss.expenses.map((item: any) => [`  ${item.accountName}`, item.balance]),
+      ["TOTAL OPERATING EXPENSES", derivedProfitAndLoss.totalExpenses],
+      [],
+      ["NET INCOME", derivedProfitAndLoss.netIncome],
+      [`NET MARGIN`, `${derivedProfitAndLoss.netMargin.toFixed(2)}%`],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Profit & Loss");
+    XLSX.writeFile(wb, `profit-and-loss-${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+    toast({ title: "Success", description: "Profit & Loss exported to Excel successfully." });
+  }
+
+  async function exportBalanceSheetToPDF() {
+    const { jsPDF } = await import("jspdf");
+    await import("jspdf-autotable");
+    const doc = new jsPDF() as any;
+    
+    doc.setFontSize(18);
+    doc.text("BALANCE SHEET", 105, 20, { align: "center" });
+    doc.setFontSize(11);
+    doc.text("Construction Company", 105, 28, { align: "center" });
+    doc.text(`As of: ${format(new Date(), "MMMM d, yyyy")}`, 105, 35, { align: "center" });
+    
+    let yPos = 50;
+    doc.setFontSize(12);
+    doc.setFont(undefined, "bold");
+    doc.text("ASSETS", 14, yPos);
+    yPos += 10;
+    
+    doc.setFontSize(11);
+    doc.text("CURRENT ASSETS", 14, yPos);
+    yPos += 7;
+    doc.setFontSize(10);
+    doc.setFont(undefined, "normal");
+    derivedBalanceSheet.currentAssets.forEach((item: any) => {
+      doc.text(`  ${item.accountName}`, 14, yPos);
+      doc.text(formatCurrency(item.balance), 195, yPos, { align: "right" });
+      yPos += 6;
+    });
+    doc.setFont(undefined, "bold");
+    doc.text("TOTAL CURRENT ASSETS", 14, yPos);
+    doc.text(formatCurrency(derivedBalanceSheet.totalCurrentAssets), 195, yPos, { align: "right" });
+    yPos += 10;
+    
+    doc.setFontSize(11);
+    doc.text("NON-CURRENT ASSETS", 14, yPos);
+    yPos += 7;
+    doc.setFontSize(10);
+    doc.setFont(undefined, "normal");
+    derivedBalanceSheet.nonCurrentAssets.forEach((item: any) => {
+      doc.text(`  ${item.accountName}`, 14, yPos);
+      doc.text(formatCurrency(item.balance), 195, yPos, { align: "right" });
+      yPos += 6;
+    });
+    doc.setFont(undefined, "bold");
+    doc.text("TOTAL NON-CURRENT ASSETS", 14, yPos);
+    doc.text(formatCurrency(derivedBalanceSheet.totalNonCurrentAssets), 195, yPos, { align: "right" });
+    yPos += 8;
+    
+    doc.setFontSize(12);
+    doc.text("TOTAL ASSETS", 14, yPos);
+    doc.text(formatCurrency(derivedBalanceSheet.totalAssets), 195, yPos, { align: "right" });
+    yPos += 15;
+    
+    doc.text("LIABILITIES & EQUITY", 14, yPos);
+    yPos += 10;
+    doc.setFontSize(11);
+    doc.text("CURRENT LIABILITIES", 14, yPos);
+    yPos += 7;
+    doc.setFontSize(10);
+    doc.setFont(undefined, "normal");
+    derivedBalanceSheet.currentLiabilities.forEach((item: any) => {
+      doc.text(`  ${item.accountName}`, 14, yPos);
+      doc.text(formatCurrency(item.balance), 195, yPos, { align: "right" });
+      yPos += 6;
+    });
+    doc.setFont(undefined, "bold");
+    doc.text("TOTAL CURRENT LIABILITIES", 14, yPos);
+    doc.text(formatCurrency(derivedBalanceSheet.totalCurrentLiabilities), 195, yPos, { align: "right" });
+    yPos += 10;
+    
+    doc.setFontSize(11);
+    doc.text("LONG-TERM LIABILITIES", 14, yPos);
+    yPos += 7;
+    doc.setFontSize(10);
+    doc.setFont(undefined, "normal");
+    derivedBalanceSheet.longTermLiabilities.forEach((item: any) => {
+      doc.text(`  ${item.accountName}`, 14, yPos);
+      doc.text(formatCurrency(item.balance), 195, yPos, { align: "right" });
+      yPos += 6;
+    });
+    doc.setFont(undefined, "bold");
+    doc.text("TOTAL LONG-TERM LIABILITIES", 14, yPos);
+    doc.text(formatCurrency(derivedBalanceSheet.totalLongTermLiabilities), 195, yPos, { align: "right" });
+    yPos += 8;
+    
+    doc.setFontSize(11);
+    doc.text("TOTAL LIABILITIES", 14, yPos);
+    doc.text(formatCurrency(derivedBalanceSheet.totalLiabilities), 195, yPos, { align: "right" });
+    yPos += 10;
+    
+    doc.text("EQUITY", 14, yPos);
+    yPos += 7;
+    doc.setFontSize(10);
+    doc.setFont(undefined, "normal");
+    derivedBalanceSheet.equity.forEach((item: any) => {
+      doc.text(`  ${item.accountName}`, 14, yPos);
+      doc.text(formatCurrency(item.balance), 195, yPos, { align: "right" });
+      yPos += 6;
+    });
+    doc.setFont(undefined, "bold");
+    doc.text("TOTAL EQUITY", 14, yPos);
+    doc.text(formatCurrency(derivedBalanceSheet.totalEquity), 195, yPos, { align: "right" });
+    yPos += 10;
+    
+    doc.setFontSize(12);
+    doc.text("TOTAL LIABILITIES & EQUITY", 14, yPos);
+    doc.text(formatCurrency(derivedBalanceSheet.totalLiabilitiesAndEquity), 195, yPos, { align: "right" });
+    
+    doc.save(`balance-sheet-${format(new Date(), "yyyy-MM-dd")}.pdf`);
+    toast({ title: "Success", description: "Balance Sheet exported to PDF successfully." });
+  }
+
+  async function exportBalanceSheetToExcel() {
+    const XLSX = await import("xlsx");
+    const data = [
+      ["BALANCE SHEET"],
+      ["Construction Company"],
+      [`As of: ${format(new Date(), "MMMM d, yyyy")}`],
+      [],
+      ["ASSETS"],
+      [],
+      ["CURRENT ASSETS"],
+      ...derivedBalanceSheet.currentAssets.map((item: any) => [`  ${item.accountName}`, item.balance]),
+      ["TOTAL CURRENT ASSETS", derivedBalanceSheet.totalCurrentAssets],
+      [],
+      ["NON-CURRENT ASSETS"],
+      ...derivedBalanceSheet.nonCurrentAssets.map((item: any) => [`  ${item.accountName}`, item.balance]),
+      ["TOTAL NON-CURRENT ASSETS", derivedBalanceSheet.totalNonCurrentAssets],
+      [],
+      ["TOTAL ASSETS", derivedBalanceSheet.totalAssets],
+      [],
+      ["LIABILITIES & EQUITY"],
+      [],
+      ["CURRENT LIABILITIES"],
+      ...derivedBalanceSheet.currentLiabilities.map((item: any) => [`  ${item.accountName}`, item.balance]),
+      ["TOTAL CURRENT LIABILITIES", derivedBalanceSheet.totalCurrentLiabilities],
+      [],
+      ["LONG-TERM LIABILITIES"],
+      ...derivedBalanceSheet.longTermLiabilities.map((item: any) => [`  ${item.accountName}`, item.balance]),
+      ["TOTAL LONG-TERM LIABILITIES", derivedBalanceSheet.totalLongTermLiabilities],
+      [],
+      ["TOTAL LIABILITIES", derivedBalanceSheet.totalLiabilities],
+      [],
+      ["EQUITY"],
+      ...derivedBalanceSheet.equity.map((item: any) => [`  ${item.accountName}`, item.balance]),
+      ["TOTAL EQUITY", derivedBalanceSheet.totalEquity],
+      [],
+      ["TOTAL LIABILITIES & EQUITY", derivedBalanceSheet.totalLiabilitiesAndEquity],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Balance Sheet");
+    XLSX.writeFile(wb, `balance-sheet-${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+    toast({ title: "Success", description: "Balance Sheet exported to Excel successfully." });
+  }
 
   if (loading) return <CRMLayout><div className="flex justify-center p-12"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div></CRMLayout>;
 
@@ -192,14 +533,16 @@ export default function AccountingPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="mb-6 bg-muted/50 p-1">
-            <TabsTrigger value="journal" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"><BookOpen className="w-4 h-4 mr-2" /> Journal Entries</TabsTrigger>
-            <TabsTrigger value="accounts" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"><Landmark className="w-4 h-4 mr-2" /> Chart of Accounts</TabsTrigger>
-            <TabsTrigger value="statements" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"><Calculator className="w-4 h-4 mr-2" /> Financial Statements</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="journal-entries">Journal Entries</TabsTrigger>
+            <TabsTrigger value="chart-of-accounts">Chart of Accounts</TabsTrigger>
+            <TabsTrigger value="financial-statements">Financial Statements</TabsTrigger>
+            <TabsTrigger value="ar-aging">AR Aging</TabsTrigger>
+            <TabsTrigger value="ap-aging">AP Aging</TabsTrigger>
           </TabsList>
 
           {/* JOURNAL ENTRIES TAB */}
-          <TabsContent value="journal" className="space-y-4">
+          <TabsContent value="journal-entries" className="space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="text-xl font-semibold">Recent Entries</h2>
               
@@ -337,7 +680,7 @@ export default function AccountingPage() {
           </TabsContent>
 
           {/* CHART OF ACCOUNTS TAB */}
-          <TabsContent value="accounts" className="space-y-4">
+          <TabsContent value="chart-of-accounts" className="space-y-4">
             <Card>
               <Table>
                 <TableHeader>
@@ -366,14 +709,26 @@ export default function AccountingPage() {
             </Card>
           </TabsContent>
 
-          {/* FINANCIAL STATEMENTS TAB */}
-          <TabsContent value="statements" className="space-y-6">
-            <div className="grid md:grid-cols-2 gap-6">
-              
-              {/* PROFIT & LOSS */}
-              <Card className="shadow-md border-t-4 border-t-primary">
-                <CardHeader className="bg-muted/20 border-b">
-                  <CardTitle>Income Statement (P&L)</CardTitle>
+          {/* Financial Statements Tab */}
+          <TabsContent value="financial-statements" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Profit & Loss */}
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle>Profit & Loss Statement</CardTitle>
+                    <CardDescription>Income statement for the period</CardDescription>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={exportProfitAndLossToPDF}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      PDF
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={exportProfitAndLossToExcel}>
+                      <FileSpreadsheet className="h-4 w-4 mr-2" />
+                      Excel
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent className="pt-6 space-y-4">
                   <div className="flex justify-between items-end border-b pb-2">
@@ -414,7 +769,7 @@ export default function AccountingPage() {
                     </div>
                   </div>
 
-                  <div className="flex justify-between items-end border-t-2 border-primary pt-3 px-2">
+                  <div className="flex justify-between items-end border-t-2 border-primary pt-3 px-2 mt-4">
                     <span className="font-bold text-xl uppercase tracking-wider">Net Income</span>
                     <span className={`font-bold text-xl ${statements.netIncome >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                       {formatCurrency(statements.netIncome)}
@@ -423,16 +778,29 @@ export default function AccountingPage() {
                 </CardContent>
               </Card>
 
-              {/* BALANCE SHEET */}
-              <Card className="shadow-md border-t-4 border-t-accent">
-                <CardHeader className="bg-muted/20 border-b">
-                  <CardTitle>Balance Sheet</CardTitle>
+              {/* Balance Sheet */}
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle>Balance Sheet</CardTitle>
+                    <CardDescription>Financial position as of today</CardDescription>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={exportBalanceSheetToPDF}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      PDF
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={exportBalanceSheetToExcel}>
+                      <FileSpreadsheet className="h-4 w-4 mr-2" />
+                      Excel
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent className="pt-6 space-y-4">
                   {/* ASSETS */}
                   <div className="space-y-2">
                     <div className="font-semibold text-lg border-b pb-1">Assets</div>
-                    {accounts.filter(a => a.type === 'asset' && (statements.balances[a.id] || 0) !== 0).map(acc => (
+                    {accounts.filter(a => a.type === 'asset' && !a.name.includes('Property') && !a.name.includes('Equipment') && !a.name.includes('Accumulated') && (statements.balances[a.id] || 0) !== 0).map(acc => (
                       <div key={acc.id} className="flex justify-between text-sm pl-4">
                         <span>{acc.name}</span>
                         <span>{formatCurrency(statements.balances[acc.id] || 0)}</span>
@@ -447,7 +815,7 @@ export default function AccountingPage() {
                   {/* LIABILITIES */}
                   <div className="space-y-2 pt-4">
                     <div className="font-semibold text-lg border-b pb-1">Liabilities</div>
-                    {accounts.filter(a => a.type === 'liability' && (statements.balances[a.id] || 0) !== 0).map(acc => (
+                    {accounts.filter(a => a.type === 'liability' && !a.name.includes('Long-term') && !a.name.includes('Retention') && (statements.balances[a.id] || 0) !== 0).map(acc => (
                       <div key={acc.id} className="flex justify-between text-sm pl-4">
                         <span>{acc.name}</span>
                         <span>{formatCurrency(statements.balances[acc.id] || 0)}</span>
@@ -462,7 +830,7 @@ export default function AccountingPage() {
                   {/* EQUITY */}
                   <div className="space-y-2 pt-4">
                     <div className="font-semibold text-lg border-b pb-1">Equity</div>
-                    {accounts.filter(a => a.type === 'equity' && (statements.balances[a.id] || 0) !== 0).map(acc => (
+                    {accounts.filter(a => a.type === 'equity' && !a.name.includes('Long-term') && !a.name.includes('Retention') && (statements.balances[a.id] || 0) !== 0).map(acc => (
                       <div key={acc.id} className="flex justify-between text-sm pl-4">
                         <span>{acc.name}</span>
                         <span>{formatCurrency(statements.balances[acc.id] || 0)}</span>
@@ -487,8 +855,289 @@ export default function AccountingPage() {
                   </div>
                 </CardContent>
               </Card>
-
             </div>
+          </TabsContent>
+
+          {/* AR Aging Tab */}
+          <TabsContent value="ar-aging" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Accounts Receivable Aging Report</CardTitle>
+                    <CardDescription>Outstanding customer invoices by aging period</CardDescription>
+                  </div>
+                  <Button onClick={loadARAgingReport}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Refresh
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {arAging ? (
+                  <>
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardDescription>Current</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold text-green-600">
+                            {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(arAging.summary.current)}
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardDescription>1-30 Days</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold text-blue-600">
+                            {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(arAging.summary.days1_30)}
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardDescription>31-60 Days</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold text-yellow-600">
+                            {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(arAging.summary.days31_60)}
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardDescription>61-90 Days</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold text-orange-600">
+                            {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(arAging.summary.days61_90)}
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardDescription>90+ Days</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold text-red-600">
+                            {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(arAging.summary.days90Plus)}
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardDescription>Total Outstanding</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold">
+                            {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(arAging.summary.total)}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    {/* Detailed Table */}
+                    <div className="border rounded-lg overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Invoice #</TableHead>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Client</TableHead>
+                            <TableHead>Project</TableHead>
+                            <TableHead className="text-right">Amount</TableHead>
+                            <TableHead className="text-right">Outstanding</TableHead>
+                            <TableHead className="text-center">Days</TableHead>
+                            <TableHead>Aging Bucket</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {arAging.invoices.map((inv: any) => (
+                            <TableRow key={inv.id}>
+                              <TableCell className="font-medium">{inv.invoice_no}</TableCell>
+                              <TableCell>{format(new Date(inv.date), "MMM d, yyyy")}</TableCell>
+                              <TableCell>{inv.client}</TableCell>
+                              <TableCell>{inv.projectName}</TableCell>
+                              <TableCell className="text-right">
+                                {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(inv.net_amount)}
+                              </TableCell>
+                              <TableCell className="text-right font-semibold">
+                                {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(inv.outstanding)}
+                              </TableCell>
+                              <TableCell className="text-center">{inv.daysOutstanding}</TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant={
+                                    inv.agingBucket === "Current"
+                                      ? "default"
+                                      : inv.agingBucket === "1-30 days"
+                                      ? "secondary"
+                                      : inv.agingBucket === "31-60 days"
+                                      ? "outline"
+                                      : "destructive"
+                                  }
+                                >
+                                  {inv.agingBucket}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <p>Click "Refresh" to load AR Aging Report</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* AP Aging Tab */}
+          <TabsContent value="ap-aging" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Accounts Payable Aging Report</CardTitle>
+                    <CardDescription>Outstanding vendor bills by aging period</CardDescription>
+                  </div>
+                  <Button onClick={loadAPAgingReport}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Refresh
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {apAging ? (
+                  <>
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardDescription>Current</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold text-green-600">
+                            {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(apAging.summary.current)}
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardDescription>1-30 Days</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold text-blue-600">
+                            {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(apAging.summary.days1_30)}
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardDescription>31-60 Days</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold text-yellow-600">
+                            {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(apAging.summary.days31_60)}
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardDescription>61-90 Days</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold text-orange-600">
+                            {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(apAging.summary.days61_90)}
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardDescription>90+ Days</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold text-red-600">
+                            {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(apAging.summary.days90Plus)}
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardDescription>Total Payable</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold">
+                            {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(apAging.summary.total)}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    {/* Detailed Table */}
+                    <div className="border rounded-lg overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Entry #</TableHead>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Description</TableHead>
+                            <TableHead>Project</TableHead>
+                            <TableHead className="text-right">Amount</TableHead>
+                            <TableHead className="text-right">Outstanding</TableHead>
+                            <TableHead className="text-center">Days</TableHead>
+                            <TableHead>Aging Bucket</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {apAging.bills.map((bill: any) => (
+                            <TableRow key={bill.id}>
+                              <TableCell className="font-medium">{bill.entryNumber}</TableCell>
+                              <TableCell>{format(new Date(bill.date), "MMM d, yyyy")}</TableCell>
+                              <TableCell>{bill.description}</TableCell>
+                              <TableCell>{bill.projectName}</TableCell>
+                              <TableCell className="text-right">
+                                {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(bill.amount)}
+                              </TableCell>
+                              <TableCell className="text-right font-semibold">
+                                {new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(bill.outstanding)}
+                              </TableCell>
+                              <TableCell className="text-center">{bill.daysOutstanding}</TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant={
+                                    bill.agingBucket === "Current"
+                                      ? "default"
+                                      : bill.agingBucket === "1-30 days"
+                                      ? "secondary"
+                                      : bill.agingBucket === "31-60 days"
+                                      ? "outline"
+                                      : "destructive"
+                                  }
+                                >
+                                  {bill.agingBucket}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <p>Click "Refresh" to load AP Aging Report</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
