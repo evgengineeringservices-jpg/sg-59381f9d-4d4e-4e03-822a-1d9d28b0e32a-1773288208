@@ -16,6 +16,7 @@ export async function getAccounts(): Promise<Account[]> {
     type: account.type as any,
     category: account.category,
     description: account.description,
+    balance: account.balance ? parseFloat(account.balance) : 0,
     createdAt: account.created_at,
     updatedAt: account.updated_at
   }));
@@ -60,6 +61,7 @@ export async function getJournalEntries(): Promise<JournalEntry[]> {
         type: line.account.type as any,
         category: line.account.category,
         description: line.account.description,
+        balance: line.account.balance ? parseFloat(line.account.balance) : 0,
         createdAt: line.account.created_at,
         updatedAt: line.account.updated_at
       } : undefined
@@ -491,7 +493,8 @@ export async function createRecurringJournalEntry(
 
 export async function updateRecurringJournalEntry(
   id: string,
-  updates: Partial<RecurringJournalEntry>
+  updates: Partial<RecurringJournalEntry>,
+  lines?: any[]
 ) {
   const { data, error } = await supabase
     .from("recurring_journal_entries")
@@ -705,7 +708,8 @@ export async function createBankReconciliation(
 
 export async function updateBankReconciliation(
   id: string,
-  updates: Partial<BankReconciliation>
+  updates: Partial<BankReconciliation>,
+  transactions?: any[]
 ) {
   const updateData: any = {
     statement_balance: updates.statementBalance,
