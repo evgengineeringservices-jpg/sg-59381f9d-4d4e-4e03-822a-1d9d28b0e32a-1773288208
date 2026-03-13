@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { Account, JournalEntry, JournalLine, RecurringJournalEntry, RecurringJournalLine, BankReconciliation, BankTransaction } from "@/types";
+import type { Account, JournalEntry, JournalLine, RecurringJournalEntry, RecurringJournalLine, BankReconciliation, BankTransaction, Shareholder, Dividend, DividendPayment, EquityAccount } from "@/types";
 
 export async function getAccounts(): Promise<Account[]> {
   const { data, error } = await supabase
@@ -719,7 +719,7 @@ export async function updateBankReconciliation(
     notes: updates.notes,
   };
 
-  if (updates.status === "completed" && !updates.completedAt) {
+  if (updates.status === "reconciled" && !updates.completedAt) {
     updateData.completed_at = new Date().toISOString();
   }
 
@@ -860,4 +860,318 @@ async function getAccountIdByCode(code: string): Promise<string> {
 
   if (error || !data) throw new Error(`Account with code ${code} not found`);
   return data.id;
+}
+
+// ==================== SHAREHOLDERS ====================
+
+export async function getShareholders(): Promise<Shareholder[]> {
+  const { data, error } = await supabase
+    .from("shareholders")
+    .select("*")
+    .order("name");
+
+  if (error) {
+    console.error("Error fetching shareholders:", error);
+    throw error;
+  }
+
+  return data.map((s: any) => ({
+    id: s.id,
+    name: s.name,
+    email: s.email,
+    phone: s.phone,
+    address: s.address,
+    tinNumber: s.tin_number,
+    shareholderType: s.shareholder_type,
+    totalShares: s.total_shares,
+    parValue: s.par_value,
+    totalInvestment: s.total_investment,
+    percentageOwnership: s.percentage_ownership,
+    certificateNumbers: s.certificate_numbers,
+    status: s.status,
+    dateJoined: s.date_joined,
+    notes: s.notes,
+    createdAt: s.created_at,
+    updatedAt: s.updated_at,
+  }));
+}
+
+export async function createShareholder(shareholder: Omit<Shareholder, "id" | "createdAt" | "updatedAt">) {
+  const { data, error } = await supabase
+    .from("shareholders")
+    .insert({
+      name: shareholder.name,
+      email: shareholder.email,
+      phone: shareholder.phone,
+      address: shareholder.address,
+      tin_number: shareholder.tinNumber,
+      shareholder_type: shareholder.shareholderType,
+      total_shares: shareholder.totalShares,
+      par_value: shareholder.parValue,
+      total_investment: shareholder.totalInvestment,
+      percentage_ownership: shareholder.percentageOwnership,
+      certificate_numbers: shareholder.certificateNumbers,
+      status: shareholder.status,
+      date_joined: shareholder.dateJoined,
+      notes: shareholder.notes,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updateShareholder(id: string, updates: Partial<Shareholder>) {
+  const updateData: any = {};
+  if (updates.name !== undefined) updateData.name = updates.name;
+  if (updates.email !== undefined) updateData.email = updates.email;
+  if (updates.phone !== undefined) updateData.phone = updates.phone;
+  if (updates.address !== undefined) updateData.address = updates.address;
+  if (updates.tinNumber !== undefined) updateData.tin_number = updates.tinNumber;
+  if (updates.shareholderType !== undefined) updateData.shareholder_type = updates.shareholderType;
+  if (updates.totalShares !== undefined) updateData.total_shares = updates.totalShares;
+  if (updates.parValue !== undefined) updateData.par_value = updates.parValue;
+  if (updates.totalInvestment !== undefined) updateData.total_investment = updates.totalInvestment;
+  if (updates.percentageOwnership !== undefined) updateData.percentage_ownership = updates.percentageOwnership;
+  if (updates.certificateNumbers !== undefined) updateData.certificate_numbers = updates.certificateNumbers;
+  if (updates.status !== undefined) updateData.status = updates.status;
+  if (updates.dateJoined !== undefined) updateData.date_joined = updates.dateJoined;
+  if (updates.notes !== undefined) updateData.notes = updates.notes;
+
+  const { data, error } = await supabase
+    .from("shareholders")
+    .update(updateData)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteShareholder(id: string) {
+  const { error } = await supabase.from("shareholders").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// ==================== DIVIDENDS ====================
+
+export async function getDividends(): Promise<Dividend[]> {
+  const { data, error } = await supabase
+    .from("dividends")
+    .select(`
+      *,
+      dividend_payments (*)
+    `)
+    .order("dividend_date", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching dividends:", error);
+    throw error;
+  }
+
+  return data.map((d: any) => ({
+    id: d.id,
+    dividendDate: d.dividend_date,
+    declarationDate: d.declaration_date,
+    recordDate: d.record_date,
+    paymentDate: d.payment_date,
+    dividendType: d.dividend_type,
+    totalAmount: d.total_amount,
+    perShareAmount: d.per_share_amount,
+    fiscalYear: d.fiscal_year,
+    fiscalQuarter: d.fiscal_quarter,
+    status: d.status,
+    approvedBy: d.approved_by,
+    paidBy: d.paid_by,
+    notes: d.notes,
+    payments: d.dividend_payments?.map((p: any) => ({
+      id: p.id,
+      dividendId: p.dividend_id,
+      shareholderId: p.shareholder_id,
+      shareholderName: p.shareholder_name,
+      shares: p.shares,
+      amount: p.amount,
+      withholdingTax: p.withholding_tax,
+      netAmount: p.net_amount,
+      paymentDate: p.payment_date,
+      paymentMethod: p.payment_method,
+      referenceNumber: p.reference_number,
+      status: p.status,
+      notes: p.notes,
+    })),
+    createdAt: d.created_at,
+    updatedAt: d.updated_at,
+  }));
+}
+
+export async function createDividend(dividend: Omit<Dividend, "id" | "createdAt" | "updatedAt">) {
+  const { data, error } = await supabase
+    .from("dividends")
+    .insert({
+      dividend_date: dividend.dividendDate,
+      declaration_date: dividend.declarationDate,
+      record_date: dividend.recordDate,
+      payment_date: dividend.paymentDate,
+      dividend_type: dividend.dividendType,
+      total_amount: dividend.totalAmount,
+      per_share_amount: dividend.perShareAmount,
+      fiscal_year: dividend.fiscalYear,
+      fiscal_quarter: dividend.fiscalQuarter,
+      status: dividend.status,
+      approved_by: dividend.approvedBy,
+      paid_by: dividend.paidBy,
+      notes: dividend.notes,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updateDividend(id: string, updates: Partial<Dividend>) {
+  const updateData: any = {};
+  if (updates.dividendDate !== undefined) updateData.dividend_date = updates.dividendDate;
+  if (updates.declarationDate !== undefined) updateData.declaration_date = updates.declarationDate;
+  if (updates.recordDate !== undefined) updateData.record_date = updates.recordDate;
+  if (updates.paymentDate !== undefined) updateData.payment_date = updates.paymentDate;
+  if (updates.dividendType !== undefined) updateData.dividend_type = updates.dividendType;
+  if (updates.totalAmount !== undefined) updateData.total_amount = updates.totalAmount;
+  if (updates.perShareAmount !== undefined) updateData.per_share_amount = updates.perShareAmount;
+  if (updates.fiscalYear !== undefined) updateData.fiscal_year = updates.fiscalYear;
+  if (updates.fiscalQuarter !== undefined) updateData.fiscal_quarter = updates.fiscalQuarter;
+  if (updates.status !== undefined) updateData.status = updates.status;
+  if (updates.approvedBy !== undefined) updateData.approved_by = updates.approvedBy;
+  if (updates.paidBy !== undefined) updateData.paid_by = updates.paidBy;
+  if (updates.notes !== undefined) updateData.notes = updates.notes;
+
+  const { data, error } = await supabase
+    .from("dividends")
+    .update(updateData)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteDividend(id: string) {
+  const { error } = await supabase.from("dividends").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function generateDividendPayments(dividendId: string, shareholders: Shareholder[]) {
+  const dividend = await supabase
+    .from("dividends")
+    .select("*")
+    .eq("id", dividendId)
+    .single();
+
+  if (!dividend.data) throw new Error("Dividend not found");
+
+  const payments = shareholders
+    .filter((s) => s.status === "active")
+    .map((shareholder) => {
+      const amount = shareholder.totalShares * dividend.data.per_share_amount;
+      const withholdingTax = amount * 0.10; // 10% final withholding tax on dividends
+      const netAmount = amount - withholdingTax;
+
+      return {
+        dividend_id: dividendId,
+        shareholder_id: shareholder.id,
+        shareholder_name: shareholder.name,
+        shares: shareholder.totalShares,
+        amount,
+        withholding_tax: withholdingTax,
+        net_amount: netAmount,
+        status: "pending",
+      };
+    });
+
+  const { data, error } = await supabase
+    .from("dividend_payments")
+    .insert(payments)
+    .select();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updateDividendPayment(id: string, updates: Partial<DividendPayment>) {
+  const updateData: any = {};
+  if (updates.paymentDate !== undefined) updateData.payment_date = updates.paymentDate;
+  if (updates.paymentMethod !== undefined) updateData.payment_method = updates.paymentMethod;
+  if (updates.referenceNumber !== undefined) updateData.reference_number = updates.referenceNumber;
+  if (updates.status !== undefined) updateData.status = updates.status;
+  if (updates.notes !== undefined) updateData.notes = updates.notes;
+
+  const { data, error } = await supabase
+    .from("dividend_payments")
+    .update(updateData)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+// ==================== EQUITY ACCOUNTS ====================
+
+export async function getEquityAccounts(): Promise<EquityAccount[]> {
+  const { data, error } = await supabase
+    .from("equity_accounts")
+    .select("*")
+    .order("account_type");
+
+  if (error) {
+    console.error("Error fetching equity accounts:", error);
+    throw error;
+  }
+
+  return data.map((e: any) => ({
+    id: e.id,
+    accountType: e.account_type,
+    name: e.name,
+    balance: e.balance,
+    description: e.description,
+    createdAt: e.created_at,
+    updatedAt: e.updated_at,
+  }));
+}
+
+export async function createEquityAccount(account: Omit<EquityAccount, "id" | "createdAt" | "updatedAt">) {
+  const { data, error } = await supabase
+    .from("equity_accounts")
+    .insert({
+      account_type: account.accountType,
+      name: account.name,
+      balance: account.balance,
+      description: account.description,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updateEquityAccount(id: string, updates: Partial<EquityAccount>) {
+  const updateData: any = {};
+  if (updates.name !== undefined) updateData.name = updates.name;
+  if (updates.balance !== undefined) updateData.balance = updates.balance;
+  if (updates.description !== undefined) updateData.description = updates.description;
+
+  const { data, error } = await supabase
+    .from("equity_accounts")
+    .update(updateData)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
 }

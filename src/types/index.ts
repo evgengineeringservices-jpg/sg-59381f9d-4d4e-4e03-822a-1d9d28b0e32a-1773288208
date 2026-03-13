@@ -196,13 +196,13 @@ export interface BankReconciliation {
   statementBalance: number;
   bookBalance: number;
   reconciledBalance?: number;
-  status: "in_progress" | "completed" | "reviewed";
-  notes?: string;
-  createdAt: string;
-  createdBy?: string;
+  status: "pending" | "reconciled";
+  reconciledBy?: string;
+  reconciledAt?: string;
   completedAt?: string;
-  transactions?: BankTransaction[];
+  notes?: string;
   account?: Account;
+  transactions?: BankTransaction[];
 }
 
 export interface BankTransaction {
@@ -531,4 +531,70 @@ export interface Notification {
   metadata?: Record<string, any>;
   createdAt: string;
   readAt?: string;
+}
+
+export interface Shareholder {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  tinNumber?: string;
+  shareholderType: "individual" | "corporate";
+  totalShares: number;
+  parValue: number;
+  totalInvestment: number;
+  percentageOwnership: number;
+  certificateNumbers?: string[];
+  status: "active" | "inactive";
+  dateJoined: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Dividend {
+  id: string;
+  dividendDate: string;
+  declarationDate: string;
+  recordDate: string;
+  paymentDate: string;
+  dividendType: "cash" | "stock" | "property";
+  totalAmount: number;
+  perShareAmount: number;
+  fiscalYear: number;
+  fiscalQuarter?: number;
+  status: "declared" | "approved" | "paid" | "cancelled";
+  approvedBy?: string;
+  paidBy?: string;
+  notes?: string;
+  payments?: DividendPayment[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DividendPayment {
+  id: string;
+  dividendId: string;
+  shareholderId: string;
+  shareholderName: string;
+  shares: number;
+  amount: number;
+  withholdingTax: number;
+  netAmount: number;
+  paymentDate?: string;
+  paymentMethod?: "check" | "bank_transfer" | "cash";
+  referenceNumber?: string;
+  status: "pending" | "paid" | "cancelled";
+  notes?: string;
+}
+
+export interface EquityAccount {
+  id: string;
+  accountType: "capital_stock" | "additional_paid_in_capital" | "retained_earnings" | "treasury_stock" | "other_equity";
+  name: string;
+  balance: number;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
 }

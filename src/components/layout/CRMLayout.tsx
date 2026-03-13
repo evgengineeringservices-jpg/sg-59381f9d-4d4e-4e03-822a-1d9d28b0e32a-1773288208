@@ -34,6 +34,10 @@ import {
   X,
   TrendingUp,
   Landmark,
+  Receipt,
+  Wallet,
+  FolderOpen,
+  Image,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -79,10 +83,29 @@ const navigationGroups = [
   },
 ];
 
+const overviewNavItems = [
+  { icon: LayoutDashboard, label: "Dashboard", href: "/crm" },
+  { icon: BarChart3, label: "Analytics", href: "/crm/analytics" },
+  { icon: FolderKanban, label: "Projects", href: "/crm/projects" },
+  { icon: Users, label: "Leads", href: "/crm/leads" },
+];
+
+const operationsNavItems = [
+  { icon: Calculator, label: "BOQ / Estimation", href: "/crm/boq" },
+  { icon: GanttChart, label: "Planning", href: "/crm/planning" },
+  { icon: CheckSquare, label: "Tasks", href: "/crm/tasks" },
+  { icon: FileText, label: "Progress Reports", href: "/crm/reports" },
+  { icon: Truck, label: "Logistics", href: "/crm/logistics" },
+  { icon: Receipt, label: "Billing", href: "/crm/billing" },
+  { icon: Wallet, label: "Accounting", href: "/crm/accounting" },
+  { icon: FolderOpen, label: "Documents", href: "/crm/documents" },
+  { icon: Image, label: "Drawings", href: "/crm/drawings" },
+];
+
 const adminNavItems = [
-  { icon: Users, label: "Users", href: "/crm/admin/users" },
-  { icon: Settings, label: "Settings", href: "/crm/admin/settings" },
-  { icon: TrendingUp, label: "Market Prices", href: "/crm/admin/market-prices" },
+  { icon: Users, label: "Users", href: "/crm/admin/users", roles: ["super_admin", "owner"] },
+  { icon: Settings, label: "Settings", href: "/crm/admin/settings", roles: ["super_admin", "owner", "contractor_admin"] },
+  { icon: TrendingUp, label: "Market Prices", href: "/crm/admin/market-prices", roles: ["super_admin", "owner", "contractor_admin"] },
 ];
 
 export function CRMLayout({ children }: { children: React.ReactNode }) {

@@ -369,6 +369,144 @@ export type Database = {
           },
         ]
       }
+      dividend_payments: {
+        Row: {
+          amount: number | null
+          created_at: string | null
+          dividend_id: string | null
+          id: string
+          net_amount: number | null
+          notes: string | null
+          payment_date: string | null
+          payment_method: string | null
+          reference_number: string | null
+          shareholder_id: string | null
+          shareholder_name: string | null
+          shares: number | null
+          status: string | null
+          withholding_tax: number | null
+        }
+        Insert: {
+          amount?: number | null
+          created_at?: string | null
+          dividend_id?: string | null
+          id?: string
+          net_amount?: number | null
+          notes?: string | null
+          payment_date?: string | null
+          payment_method?: string | null
+          reference_number?: string | null
+          shareholder_id?: string | null
+          shareholder_name?: string | null
+          shares?: number | null
+          status?: string | null
+          withholding_tax?: number | null
+        }
+        Update: {
+          amount?: number | null
+          created_at?: string | null
+          dividend_id?: string | null
+          id?: string
+          net_amount?: number | null
+          notes?: string | null
+          payment_date?: string | null
+          payment_method?: string | null
+          reference_number?: string | null
+          shareholder_id?: string | null
+          shareholder_name?: string | null
+          shares?: number | null
+          status?: string | null
+          withholding_tax?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dividend_payments_dividend_id_fkey"
+            columns: ["dividend_id"]
+            isOneToOne: false
+            referencedRelation: "dividends"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dividend_payments_shareholder_id_fkey"
+            columns: ["shareholder_id"]
+            isOneToOne: false
+            referencedRelation: "shareholders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dividends: {
+        Row: {
+          approved_by: string | null
+          created_at: string | null
+          declaration_date: string | null
+          dividend_date: string | null
+          dividend_type: string | null
+          fiscal_quarter: number | null
+          fiscal_year: number | null
+          id: string
+          notes: string | null
+          paid_by: string | null
+          payment_date: string | null
+          per_share_amount: number | null
+          record_date: string | null
+          status: string | null
+          total_amount: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          approved_by?: string | null
+          created_at?: string | null
+          declaration_date?: string | null
+          dividend_date?: string | null
+          dividend_type?: string | null
+          fiscal_quarter?: number | null
+          fiscal_year?: number | null
+          id?: string
+          notes?: string | null
+          paid_by?: string | null
+          payment_date?: string | null
+          per_share_amount?: number | null
+          record_date?: string | null
+          status?: string | null
+          total_amount?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          approved_by?: string | null
+          created_at?: string | null
+          declaration_date?: string | null
+          dividend_date?: string | null
+          dividend_type?: string | null
+          fiscal_quarter?: number | null
+          fiscal_year?: number | null
+          id?: string
+          notes?: string | null
+          paid_by?: string | null
+          payment_date?: string | null
+          per_share_amount?: number | null
+          record_date?: string | null
+          status?: string | null
+          total_amount?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dividends_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dividends_paid_by_fkey"
+            columns: ["paid_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       documents: {
         Row: {
           category: string
@@ -477,6 +615,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      equity_accounts: {
+        Row: {
+          account_type: string | null
+          balance: number | null
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          account_type?: string | null
+          balance?: number | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          account_type?: string | null
+          balance?: number | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       journal_entries: {
         Row: {
@@ -1004,6 +1172,66 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      shareholders: {
+        Row: {
+          address: string | null
+          certificate_numbers: string[] | null
+          created_at: string | null
+          date_joined: string | null
+          email: string | null
+          id: string
+          name: string
+          notes: string | null
+          par_value: number | null
+          percentage_ownership: number | null
+          phone: string | null
+          shareholder_type: string | null
+          status: string | null
+          tin_number: string | null
+          total_investment: number | null
+          total_shares: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          address?: string | null
+          certificate_numbers?: string[] | null
+          created_at?: string | null
+          date_joined?: string | null
+          email?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          par_value?: number | null
+          percentage_ownership?: number | null
+          phone?: string | null
+          shareholder_type?: string | null
+          status?: string | null
+          tin_number?: string | null
+          total_investment?: number | null
+          total_shares?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          address?: string | null
+          certificate_numbers?: string[] | null
+          created_at?: string | null
+          date_joined?: string | null
+          email?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          par_value?: number | null
+          percentage_ownership?: number | null
+          phone?: string | null
+          shareholder_type?: string | null
+          status?: string | null
+          tin_number?: string | null
+          total_investment?: number | null
+          total_shares?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       tasks: {
         Row: {

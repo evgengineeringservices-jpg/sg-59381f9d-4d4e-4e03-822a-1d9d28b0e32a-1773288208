@@ -104,7 +104,7 @@ export default function AccountingPage() {
     statementDate: new Date().toISOString().split("T")[0],
     statementBalance: 0,
     bookBalance: 0,
-    status: "in_progress" as "in_progress" | "completed" | "reviewed",
+    status: "pending" as "pending" | "reconciled",
   });
   const [bankTransactions, setBankTransactions] = useState<any[]>([]);
 
@@ -347,7 +347,7 @@ export default function AccountingPage() {
 
       setReconciliationDialogOpen(false);
       setEditingReconciliation(null);
-      setNewReconciliation({ accountId: "", statementDate: new Date().toISOString().split("T")[0], statementBalance: 0, bookBalance: 0, status: "in_progress" });
+      setNewReconciliation({ accountId: "", statementDate: new Date().toISOString().split("T")[0], statementBalance: 0, bookBalance: 0, status: "pending" });
       setBankTransactions([]);
       loadBankReconciliations();
     } catch (error: any) {
@@ -1260,8 +1260,8 @@ export default function AccountingPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Status</SelectItem>
-                        <SelectItem value="in_progress">In Progress</SelectItem>
-                        <SelectItem value="completed">Completed</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="reconciled">Reconciled</SelectItem>
                       </SelectContent>
                     </Select>
                     <div>
@@ -1306,8 +1306,8 @@ export default function AccountingPage() {
                               {formatCurrency(Math.abs(difference))}
                             </TableCell>
                             <TableCell>
-                              <Badge variant={recon.status === "completed" ? "default" : "secondary"}>
-                                {recon.status === "completed" ? <CheckCircle className="h-3 w-3 mr-1" /> : <Clock className="h-3 w-3 mr-1" />}
+                              <Badge variant={recon.status === "reconciled" ? "default" : "secondary"}>
+                                {recon.status === "reconciled" ? <CheckCircle className="h-3 w-3 mr-1" /> : <Clock className="h-3 w-3 mr-1" />}
                                 {recon.status.replace("_", " ")}
                               </Badge>
                             </TableCell>
