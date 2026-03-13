@@ -1,13 +1,11 @@
 import { useState, useEffect, useMemo } from "react";
 import { CRMLayout } from "@/components/layout/CRMLayout";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
@@ -41,8 +39,20 @@ import {
   getFinancialStatementComparison,
 } from "@/services/accountingService";
 import { getProjects } from "@/services/crmService";
-import { Plus, Calculator, Landmark, BookOpen, CheckCircle2, Trash2, RefreshCw, FileText, FileSpreadsheet } from "lucide-react";
+import { Plus, RefreshCw, Trash2, Save, X, FileText, FileSpreadsheet, CheckCircle2 } from "lucide-react";
 import { format } from "date-fns";
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 
 export default function AccountingPage() {
   const { toast } = useToast();
@@ -110,6 +120,145 @@ export default function AccountingPage() {
     },
   ]);
   const [comparisonData, setComparisonData] = useState<any>(null);
+
+  // Filters and Pagination
+  const [recurringFilters, setRecurringFilters] = useState({
+    search: "",
+    frequency: "all",
+    status: "all",
+  });
+  const [recurringPage, setRecurringPage] = useState(1);
+  const [recurringPerPage] = useState(10);
+
+  const [reconciliationFilters, setReconciliationFilters] = useState({
+    accountId: "all",
+    status: "all",
+    dateFrom: "",
+    dateTo: "",
+  });
+  const [reconciliationPage, setReconciliationPage] = useState(1);
+  const [reconciliationPerPage] = useState(10);
+
+  // Chart data for comparisons
+  const [comparisonCharts, setComparisonCharts] = useState<any>(null);
+
+  // Filter and paginate recurring entries
+  const filteredRecurringEntries = useMemo(() => {
+    if (!recurringEntries) return [];
+
+    const filtered = recurringEntries.filter((entry) => {
+      // Search filter
+      if (
+        recurringFilters.search &&
+        !entry.description.toLowerCase().includes(recurringFilters.search.toLowerCase())
+      ) {
+        return false;
+      }
+
+      // Frequency filter
+      if (recurringFilters.frequency !== "all" && entry.frequency !== recurringFilters.frequency) {
+        return false;
+      }
+
+      // Status filter
+      if (recurringFilters.status !== "all") {
+        const isActive = entry.isActive;
+        if (recurringFilters.status === "active" && !isActive) return false;
+        if (recurringFilters.status === "inactive" && isActive) return false;
+      }
+
+      return true;
+    });
+
+    return filtered;
+  }, [recurringEntries, recurringFilters]);
+
+  const paginatedRecurringEntries = useMemo(() => {
+    const start = (recurringPage - 1) * recurringPerPage;
+    const end = start + recurringPerPage;
+    return filteredRecurringEntries.slice(start, end);
+  }, [filteredRecurringEntries, recurringPage, recurringPerPage]);
+
+  const totalRecurringPages = Math.ceil(filteredRecurringEntries.length / recurringPerPage);
+
+  // Filter and paginate bank reconciliations
+  const filteredReconciliations = useMemo(() => {
+    if (!reconciliations) return [];
+
+    const filtered = reconciliations.filter((rec) => {
+      // Account filter
+      if (reconciliationFilters.accountId !== "all" && rec.accountId !== reconciliationFilters.accountId) {
+        return false;
+      }
+
+      // Status filter
+      if (reconciliationFilters.status !== "all" && rec.status !== reconciliationFilters.status) {
+        return false;
+      }
+
+      // Date range filter
+      if (reconciliationFilters.dateFrom && rec.statementDate < reconciliationFilters.dateFrom) {
+        return false;
+      }
+      if (reconciliationFilters.dateTo && rec.statementDate > reconciliationFilters.dateTo) {
+        return false;
+      }
+
+      return true;
+    });
+
+    return filtered;
+  }, [reconciliations, reconciliationFilters]);
+
+  const paginatedReconciliations = useMemo(() => {
+    const start = (reconciliationPage - 1) * reconciliationPerPage;
+    const end = start + reconciliationPerPage;
+    return filteredReconciliations.slice(start, end);
+  }, [filteredReconciliations, reconciliationPage, reconciliationPerPage]);
+
+  const totalReconciliationPages = Math.ceil(filteredReconciliations.length / reconciliationPerPage);
+
+  // Generate chart data from comparison
+  useEffect(() => {
+    if (!comparisonData) return;
+
+    const charts = {
+      revenueComparison: [],
+      expenseComparison: [],
+      profitMarginTrend: [],
+      assetGrowth: [],
+    };
+
+    // Extract data for charts
+    const periods = Object.keys(comparisonData.profitAndLoss);
+    
+    periods.forEach((period) => {
+      const pl = comparisonData.profitAndLoss[period];
+      const bs = comparisonData.balanceSheet[period];
+
+      charts.revenueComparison.push({
+        period,
+        revenue: pl.totalRevenue,
+        cogs: pl.totalCOGS,
+        expenses: pl.totalExpenses,
+      });
+
+      charts.profitMarginTrend.push({
+        period,
+        grossMargin: pl.grossMargin,
+        netMargin: pl.netMargin,
+      });
+
+      charts.assetGrowth.push({
+        period,
+        currentAssets: bs.totalCurrentAssets,
+        nonCurrentAssets: bs.totalNonCurrentAssets,
+        totalAssets: bs.totalAssets,
+      });
+    });
+
+    setComparisonCharts(charts);
+  }, [comparisonData]);
 
   useEffect(() => {
     loadData();
@@ -655,7 +804,7 @@ export default function AccountingPage() {
     }
   }
 
-  async function handleGenerateFromRecurring() {
+  async function handleGenerateRecurringEntries() {
     try {
       const generated = await generateJournalEntriesFromRecurring();
       toast({ 
@@ -752,7 +901,7 @@ export default function AccountingPage() {
     }
   }
 
-  if (loading) return <CRMLayout><div className="flex justify-center p-12"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div></CRMLayout>;
+  if (loading) return <CRMLayout><div className="flex items-center justify-center h-96"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div></CRMLayout>;
 
   return (
     <CRMLayout>
@@ -769,7 +918,7 @@ export default function AccountingPage() {
             <TabsTrigger value="financial-statements">Financial Statements</TabsTrigger>
             <TabsTrigger value="ar-aging">AR Aging</TabsTrigger>
             <TabsTrigger value="ap-aging">AP Aging</TabsTrigger>
-            <TabsTrigger value="recurring">Recurring Entries</TabsTrigger>
+            <TabsTrigger value="recurring-entries">Recurring Entries</TabsTrigger>
             <TabsTrigger value="bank-reconciliation">Bank Reconciliation</TabsTrigger>
             <TabsTrigger value="period-comparison">Period Comparison</TabsTrigger>
           </TabsList>
@@ -1374,94 +1523,164 @@ export default function AccountingPage() {
           </TabsContent>
 
           {/* RECURRING ENTRIES TAB */}
-          <TabsContent value="recurring" className="space-y-6">
+          <TabsContent value="recurring-entries" className="space-y-6">
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
                     <CardTitle>Recurring Journal Entries</CardTitle>
-                    <CardDescription>Automate recurring transactions like rent, utilities, and salaries</CardDescription>
+                    <CardDescription>
+                      Automate repetitive monthly transactions like rent, utilities, and salaries
+                    </CardDescription>
                   </div>
                   <div className="flex gap-2">
-                    <Button onClick={handleGenerateFromRecurring} variant="outline">
+                    <Button onClick={handleGenerateRecurringEntries} variant="outline">
                       <RefreshCw className="h-4 w-4 mr-2" />
                       Generate Due Entries
                     </Button>
-                    <Button onClick={() => { loadRecurringEntries(); setRecurringDialogOpen(true); }}>
+                    <Button onClick={() => {
+                      setEditingRecurringEntry(null);
+                      setRecurringFormData({
+                        description: "",
+                        frequency: "monthly",
+                        startDate: new Date().toISOString().split("T")[0],
+                        endDate: "",
+                        projectId: "",
+                        isActive: true,
+                        lines: [
+                          { accountId: "", description: "", debit: 0, credit: 0 },
+                          { accountId: "", description: "", debit: 0, credit: 0 },
+                        ],
+                      });
+                      setRecurringDialogOpen(true);
+                    }}>
                       <Plus className="h-4 w-4 mr-2" />
                       New Recurring Entry
                     </Button>
                   </div>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
+                {/* Filters */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-muted/50 rounded-lg">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Search</label>
+                    <Input
+                      placeholder="Search description..."
+                      value={recurringFilters.search}
+                      onChange={(e) => setRecurringFilters({ ...recurringFilters, search: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Frequency</label>
+                    <Select
+                      value={recurringFilters.frequency}
+                      onValueChange={(value) => {
+                        setRecurringFilters({ ...recurringFilters, frequency: value });
+                        setRecurringPage(1);
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Frequencies</SelectItem>
+                        <SelectItem value="daily">Daily</SelectItem>
+                        <SelectItem value="weekly">Weekly</SelectItem>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                        <SelectItem value="quarterly">Quarterly</SelectItem>
+                        <SelectItem value="yearly">Yearly</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Status</label>
+                    <Select
+                      value={recurringFilters.status}
+                      onValueChange={(value) => {
+                        setRecurringFilters({ ...recurringFilters, status: value });
+                        setRecurringPage(1);
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="inactive">Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Results count */}
+                <div className="text-sm text-muted-foreground">
+                  Showing {paginatedRecurringEntries.length} of {filteredRecurringEntries.length} entries
+                </div>
+
+                {/* Table */}
                 <div className="border rounded-lg overflow-hidden">
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Description</TableHead>
                         <TableHead>Frequency</TableHead>
-                        <TableHead>Next Occurrence</TableHead>
+                        <TableHead>Next Run</TableHead>
                         <TableHead>Project</TableHead>
-                        <TableHead className="text-center">Status</TableHead>
+                        <TableHead>Status</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {recurringEntries.length === 0 ? (
+                      {paginatedRecurringEntries.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
-                            No recurring entries found. Click "New Recurring Entry" to create one.
+                            {recurringFilters.search || recurringFilters.frequency !== "all" || recurringFilters.status !== "all"
+                              ? "No recurring entries match your filters"
+                              : "No recurring entries yet. Click 'New Recurring Entry' to create one."}
                           </TableCell>
                         </TableRow>
                       ) : (
-                        recurringEntries.map((entry: any) => (
+                        paginatedRecurringEntries.map((entry) => (
                           <TableRow key={entry.id}>
                             <TableCell className="font-medium">{entry.description}</TableCell>
-                            <TableCell className="capitalize">{entry.frequency}</TableCell>
-                            <TableCell>{format(new Date(entry.nextOccurrence), "MMM d, yyyy")}</TableCell>
                             <TableCell>
-                              {entry.projectId ? projects.find(p => p.id === entry.projectId)?.name || "N/A" : "General"}
+                              <Badge variant="outline" className="capitalize">
+                                {entry.frequency}
+                              </Badge>
                             </TableCell>
-                            <TableCell className="text-center">
+                            <TableCell>{new Date(entry.nextOccurrence).toLocaleDateString()}</TableCell>
+                            <TableCell>
+                              {entry.projectId
+                                ? projects.find((p) => p.id === entry.projectId)?.name || "Unknown"
+                                : "General"}
+                            </TableCell>
+                            <TableCell>
                               <Badge variant={entry.isActive ? "default" : "secondary"}>
                                 {entry.isActive ? "Active" : "Inactive"}
                               </Badge>
                             </TableCell>
                             <TableCell className="text-right">
-                              <div className="flex justify-end gap-2">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => {
-                                    setEditingRecurring(entry);
-                                    setRecurringFormData({
-                                      description: entry.description,
-                                      frequency: entry.frequency,
-                                      startDate: entry.startDate,
-                                      endDate: entry.endDate || "",
-                                      projectId: entry.projectId || "",
-                                    });
-                                    setRecurringLines(entry.lines?.map((l: any) => ({
-                                      accountId: l.accountId,
-                                      description: l.description,
-                                      debit: l.debit,
-                                      credit: l.credit,
-                                    })) || []);
-                                    setRecurringDialogOpen(true);
-                                  }}
-                                >
-                                  Edit
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleDeleteRecurringEntry(entry.id)}
-                                  className="text-destructive"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setEditingRecurringEntry(entry);
+                                  setRecurringFormData({
+                                    description: entry.description,
+                                    frequency: entry.frequency,
+                                    startDate: entry.startDate,
+                                    endDate: entry.endDate || "",
+                                    projectId: entry.projectId || "",
+                                    isActive: entry.isActive,
+                                    lines: entry.lines || [],
+                                  });
+                                  setRecurringDialogOpen(true);
+                                }}
+                              >
+                                Edit
+                              </Button>
                             </TableCell>
                           </TableRow>
                         ))
@@ -1469,6 +1688,33 @@ export default function AccountingPage() {
                     </TableBody>
                   </Table>
                 </div>
+
+                {/* Pagination */}
+                {totalRecurringPages > 1 && (
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-muted-foreground">
+                      Page {recurringPage} of {totalRecurringPages}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={recurringPage === 1}
+                        onClick={() => setRecurringPage(recurringPage - 1)}
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={recurringPage === totalRecurringPages}
+                        onClick={() => setRecurringPage(recurringPage + 1)}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -1671,15 +1917,104 @@ export default function AccountingPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <CardTitle>Bank Reconciliation</CardTitle>
-                    <CardDescription>Match bank statements with accounting records</CardDescription>
+                    <CardDescription>
+                      Match your accounting records with bank statements to ensure accuracy
+                    </CardDescription>
                   </div>
-                  <Button onClick={() => { loadBankReconciliations(); setReconciliationDialogOpen(true); }}>
+                  <Button onClick={() => {
+                    setEditingReconciliation(null);
+                    setReconciliationFormData({
+                      accountId: "",
+                      statementDate: new Date().toISOString().split("T")[0],
+                      statementBalance: 0,
+                      bookBalance: 0,
+                      reconciledBalance: 0,
+                      status: "in_progress",
+                      transactions: [],
+                    });
+                    setReconciliationDialogOpen(true);
+                  }}>
                     <Plus className="h-4 w-4 mr-2" />
                     New Reconciliation
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
+                {/* Filters */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Bank Account</label>
+                    <Select
+                      value={reconciliationFilters.accountId}
+                      onValueChange={(value) => {
+                        setReconciliationFilters({ ...reconciliationFilters, accountId: value });
+                        setReconciliationPage(1);
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Accounts" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Accounts</SelectItem>
+                        {accounts
+                          .filter((acc) => acc.type === "asset" && acc.name.toLowerCase().includes("cash"))
+                          .map((acc) => (
+                            <SelectItem key={acc.id} value={acc.id}>
+                              {acc.code} - {acc.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Status</label>
+                    <Select
+                      value={reconciliationFilters.status}
+                      onValueChange={(value) => {
+                        setReconciliationFilters({ ...reconciliationFilters, status: value });
+                        setReconciliationPage(1);
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="in_progress">In Progress</SelectItem>
+                        <SelectItem value="completed">Completed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Date From</label>
+                    <Input
+                      type="date"
+                      value={reconciliationFilters.dateFrom}
+                      onChange={(e) => {
+                        setReconciliationFilters({ ...reconciliationFilters, dateFrom: e.target.value });
+                        setReconciliationPage(1);
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Date To</label>
+                    <Input
+                      type="date"
+                      value={reconciliationFilters.dateTo}
+                      onChange={(e) => {
+                        setReconciliationFilters({ ...reconciliationFilters, dateTo: e.target.value });
+                        setReconciliationPage(1);
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Results count */}
+                <div className="text-sm text-muted-foreground">
+                  Showing {paginatedReconciliations.length} of {filteredReconciliations.length} reconciliations
+                </div>
+
+                {/* Table */}
                 <div className="border rounded-lg overflow-hidden">
                   <Table>
                     <TableHeader>
@@ -1689,45 +2024,61 @@ export default function AccountingPage() {
                         <TableHead className="text-right">Statement Balance</TableHead>
                         <TableHead className="text-right">Book Balance</TableHead>
                         <TableHead className="text-right">Difference</TableHead>
-                        <TableHead className="text-center">Status</TableHead>
+                        <TableHead>Status</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {reconciliations.length === 0 ? (
+                      {paginatedReconciliations.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
-                            No reconciliations found. Click "New Reconciliation" to start.
+                            {reconciliationFilters.accountId !== "all" || reconciliationFilters.status !== "all" || reconciliationFilters.dateFrom || reconciliationFilters.dateTo
+                              ? "No reconciliations match your filters"
+                              : "No bank reconciliations yet. Click 'New Reconciliation' to start."}
                           </TableCell>
                         </TableRow>
                       ) : (
-                        reconciliations.map((rec: any) => {
+                        paginatedReconciliations.map((rec) => {
                           const difference = rec.statementBalance - rec.bookBalance;
                           return (
                             <TableRow key={rec.id}>
-                              <TableCell className="font-medium">{rec.account?.name || "N/A"}</TableCell>
-                              <TableCell>{format(new Date(rec.statementDate), "MMM d, yyyy")}</TableCell>
+                              <TableCell className="font-medium">
+                                {rec.account ? `${rec.account.code} - ${rec.account.name}` : "Unknown"}
+                              </TableCell>
+                              <TableCell>{new Date(rec.statementDate).toLocaleDateString()}</TableCell>
                               <TableCell className="text-right">{formatCurrency(rec.statementBalance)}</TableCell>
                               <TableCell className="text-right">{formatCurrency(rec.bookBalance)}</TableCell>
-                              <TableCell className={`text-right font-semibold ${Math.abs(difference) < 1 ? "text-green-600" : "text-red-600"}`}>
-                                {formatCurrency(difference)}
+                              <TableCell className="text-right">
+                                <span className={difference !== 0 ? "text-destructive font-semibold" : "text-green-600"}>
+                                  {formatCurrency(Math.abs(difference))}
+                                  {difference !== 0 && " ⚠️"}
+                                </span>
                               </TableCell>
-                              <TableCell className="text-center">
+                              <TableCell>
                                 <Badge variant={rec.status === "completed" ? "default" : "secondary"}>
-                                  {rec.status === "completed" ? "Completed" : "In Progress"}
+                                  {rec.status === "in_progress" ? "In Progress" : "Completed"}
                                 </Badge>
                               </TableCell>
                               <TableCell className="text-right">
-                                {rec.status !== "completed" && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleCompleteReconciliation(rec.id)}
-                                    className="text-green-600"
-                                  >
-                                    Complete
-                                  </Button>
-                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setEditingReconciliation(rec);
+                                    setReconciliationFormData({
+                                      accountId: rec.accountId,
+                                      statementDate: rec.statementDate,
+                                      statementBalance: rec.statementBalance,
+                                      bookBalance: rec.bookBalance,
+                                      reconciledBalance: rec.reconciledBalance,
+                                      status: rec.status,
+                                      transactions: rec.transactions || [],
+                                    });
+                                    setReconciliationDialogOpen(true);
+                                  }}
+                                >
+                                  View
+                                </Button>
                               </TableCell>
                             </TableRow>
                           );
@@ -1736,471 +2087,441 @@ export default function AccountingPage() {
                     </TableBody>
                   </Table>
                 </div>
-              </CardContent>
-            </Card>
 
-            {/* Bank Reconciliation Dialog */}
-            <Dialog open={reconciliationDialogOpen} onOpenChange={setReconciliationDialogOpen}>
-              <DialogContent className="max-w-4xl">
-                <DialogHeader>
-                  <DialogTitle>New Bank Reconciliation</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Bank Account</Label>
-                      <Select
-                        value={reconciliationFormData.accountId}
-                        onValueChange={v => setReconciliationFormData({ ...reconciliationFormData, accountId: v })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select bank account" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {accounts.filter(a => a.code.startsWith("1000")).map(acc => (
-                            <SelectItem key={acc.id} value={acc.id}>
-                              {acc.code} - {acc.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                {/* Pagination */}
+                {totalReconciliationPages > 1 && (
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-muted-foreground">
+                      Page {reconciliationPage} of {totalReconciliationPages}
                     </div>
-                    <div className="space-y-2">
-                      <Label>Statement Date</Label>
-                      <Input
-                        type="date"
-                        value={reconciliationFormData.statementDate}
-                        onChange={e =>
-                          setReconciliationFormData({ ...reconciliationFormData, statementDate: e.target.value })
-                        }
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Statement Balance</Label>
-                      <Input
-                        type="number"
-                        value={reconciliationFormData.statementBalance}
-                        onChange={e =>
-                          setReconciliationFormData({
-                            ...reconciliationFormData,
-                            statementBalance: Number(e.target.value),
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Book Balance</Label>
-                      <Input
-                        type="number"
-                        value={reconciliationFormData.bookBalance}
-                        onChange={e =>
-                          setReconciliationFormData({ ...reconciliationFormData, bookBalance: Number(e.target.value) })
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <Label>Bank Statement Transactions</Label>
+                    <div className="flex gap-2">
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() =>
-                          setBankTransactions([
-                            ...bankTransactions,
-                            {
-                              transactionDate: new Date().toISOString().split("T")[0],
-                              description: "",
-                              referenceNo: "",
-                              debit: 0,
-                              credit: 0,
-                              isMatched: false,
-                            },
-                          ])
-                        }
+                        disabled={reconciliationPage === 1}
+                        onClick={() => setReconciliationPage(reconciliationPage - 1)}
                       >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Add Transaction
+                        Previous
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={reconciliationPage === totalReconciliationPages}
+                        onClick={() => setReconciliationPage(reconciliationPage + 1)}
+                      >
+                        Next
                       </Button>
                     </div>
-                    <div className="border rounded-md">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Date</TableHead>
-                            <TableHead>Description</TableHead>
-                            <TableHead>Reference</TableHead>
-                            <TableHead className="text-right">Debit</TableHead>
-                            <TableHead className="text-right">Credit</TableHead>
-                            <TableHead className="w-12"></TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {bankTransactions.map((txn, i) => (
-                            <TableRow key={i}>
-                              <TableCell>
-                                <Input
-                                  type="date"
-                                  value={txn.transactionDate}
-                                  onChange={e => {
-                                    const updated = [...bankTransactions];
-                                    updated[i].transactionDate = e.target.value;
-                                    setBankTransactions(updated);
-                                  }}
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Input
-                                  placeholder="Description"
-                                  value={txn.description}
-                                  onChange={e => {
-                                    const updated = [...bankTransactions];
-                                    updated[i].description = e.target.value;
-                                    setBankTransactions(updated);
-                                  }}
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Input
-                                  placeholder="Ref #"
-                                  value={txn.referenceNo}
-                                  onChange={e => {
-                                    const updated = [...bankTransactions];
-                                    updated[i].referenceNo = e.target.value;
-                                    setBankTransactions(updated);
-                                  }}
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Input
-                                  type="number"
-                                  className="text-right"
-                                  value={txn.debit || ""}
-                                  onChange={e => {
-                                    const updated = [...bankTransactions];
-                                    updated[i].debit = Number(e.target.value);
-                                    if (Number(e.target.value) > 0) updated[i].credit = 0;
-                                    setBankTransactions(updated);
-                                  }}
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Input
-                                  type="number"
-                                  className="text-right"
-                                  value={txn.credit || ""}
-                                  onChange={e => {
-                                    const updated = [...bankTransactions];
-                                    updated[i].credit = Number(e.target.value);
-                                    if (Number(e.target.value) > 0) updated[i].debit = 0;
-                                    setBankTransactions(updated);
-                                  }}
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => setBankTransactions(bankTransactions.filter((_, idx) => idx !== i))}
-                                >
-                                  <Trash2 className="w-4 h-4 text-destructive" />
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
                   </div>
-
-                  <div className="flex justify-end gap-2 pt-4">
-                    <Button variant="outline" onClick={() => setReconciliationDialogOpen(false)}>
-                      Cancel
-                    </Button>
-                    <Button onClick={handleSaveBankReconciliation}>Save Reconciliation</Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* PERIOD COMPARISON TAB */}
           <TabsContent value="period-comparison" className="space-y-6">
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Period Comparison</CardTitle>
-                    <CardDescription>Compare financial statements across different time periods</CardDescription>
-                  </div>
-                  <Button onClick={loadPeriodComparison}>
+                <CardTitle>Period Comparison</CardTitle>
+                <CardDescription>
+                  Compare financial performance across different time periods
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Period Selection */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-muted/50 rounded-lg">
+                  {comparisonPeriods.map((period, index) => (
+                    <div key={index} className="space-y-4 p-4 bg-background rounded-lg border">
+                      <h3 className="font-semibold mb-4">Period {index + 1}</h3>
+                      <div className="space-y-2">
+                        <Label>Label</Label>
+                        <Input
+                          placeholder="e.g., Current Year"
+                          value={period.label}
+                          onChange={(e) => {
+                            const updated = [...comparisonPeriods];
+                            updated[index].label = e.target.value;
+                            setComparisonPeriods(updated);
+                          }}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Start Date</Label>
+                          <Input
+                            type="date"
+                            value={period.startDate}
+                            onChange={(e) => {
+                              const updated = [...comparisonPeriods];
+                              updated[index].startDate = e.target.value;
+                              setComparisonPeriods(updated);
+                            }}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>End Date</Label>
+                          <Input
+                            type="date"
+                            value={period.endDate}
+                            onChange={(e) => {
+                              const updated = [...comparisonPeriods];
+                              updated[index].endDate = e.target.value;
+                              setComparisonPeriods(updated);
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex justify-center">
+                  <Button onClick={loadPeriodComparison} size="lg">
                     <RefreshCw className="h-4 w-4 mr-2" />
                     Generate Comparison
                   </Button>
                 </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-6">
-                  {/* Period Selection */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {comparisonPeriods.map((period, idx) => (
-                      <Card key={idx}>
-                        <CardHeader className="pb-3">
-                          <CardTitle className="text-sm">Period {idx + 1}</CardTitle>
+
+                {/* Charts */}
+                {comparisonCharts && (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 gap-6">
+                      {/* Revenue Comparison Chart */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Revenue & Expense Comparison</CardTitle>
+                          <CardDescription>Track revenue growth and cost trends</CardDescription>
                         </CardHeader>
-                        <CardContent className="space-y-2">
-                          <div className="space-y-1">
-                            <Label className="text-xs">Label</Label>
-                            <Input
-                              placeholder="e.g., Current Year"
-                              value={period.label}
-                              onChange={e => {
-                                const updated = [...comparisonPeriods];
-                                updated[idx].label = e.target.value;
-                                setComparisonPeriods(updated);
-                              }}
-                            />
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div className="space-y-1">
-                              <Label className="text-xs">Start Date</Label>
-                              <Input
-                                type="date"
-                                value={period.startDate}
-                                onChange={e => {
-                                  const updated = [...comparisonPeriods];
-                                  updated[idx].startDate = e.target.value;
-                                  setComparisonPeriods(updated);
+                        <CardContent>
+                          <ResponsiveContainer width="100%" height={300}>
+                            <BarChart data={comparisonCharts.revenueComparison}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="period" />
+                              <YAxis />
+                              <Tooltip
+                                formatter={(value: any) => formatCurrency(value)}
+                                contentStyle={{
+                                  backgroundColor: "hsl(var(--background))",
+                                  border: "1px solid hsl(var(--border))",
+                                  borderRadius: "8px",
                                 }}
                               />
+                              <Legend />
+                              <Bar dataKey="revenue" fill="hsl(var(--primary))" name="Revenue" />
+                              <Bar dataKey="cogs" fill="hsl(142 76% 36%)" name="COGS" />
+                              <Bar dataKey="expenses" fill="hsl(var(--destructive))" name="Expenses" />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </CardContent>
+                      </Card>
+
+                      {/* Profit Margin Trend */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Profit Margin Trend</CardTitle>
+                          <CardDescription>Monitor profitability over time</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <ResponsiveContainer width="100%" height={300}>
+                            <LineChart data={comparisonCharts.profitMarginTrend}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="period" />
+                              <YAxis tickFormatter={(value) => `${value}%`} />
+                              <Tooltip
+                                formatter={(value: any) => `${value.toFixed(2)}%`}
+                                contentStyle={{
+                                  backgroundColor: "hsl(var(--background))",
+                                  border: "1px solid hsl(var(--border))",
+                                  borderRadius: "8px",
+                                }}
+                              />
+                              <Legend />
+                              <Line
+                                type="monotone"
+                                dataKey="grossMargin"
+                                stroke="hsl(var(--primary))"
+                                strokeWidth={2}
+                                name="Gross Margin %"
+                              />
+                              <Line
+                                type="monotone"
+                                dataKey="netMargin"
+                                stroke="hsl(142 76% 36%)"
+                                strokeWidth={2}
+                                name="Net Margin %"
+                              />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </CardContent>
+                      </Card>
+
+                      {/* Asset Growth */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Asset Growth</CardTitle>
+                          <CardDescription>Track company asset expansion</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <ResponsiveContainer width="100%" height={300}>
+                            <BarChart data={comparisonCharts.assetGrowth}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="period" />
+                              <YAxis />
+                              <Tooltip
+                                formatter={(value: any) => formatCurrency(value)}
+                                contentStyle={{
+                                  backgroundColor: "hsl(var(--background))",
+                                  border: "1px solid hsl(var(--border))",
+                                  borderRadius: "8px",
+                                }}
+                              />
+                              <Legend />
+                              <Bar dataKey="currentAssets" fill="hsl(var(--primary))" name="Current Assets" />
+                              <Bar dataKey="nonCurrentAssets" fill="hsl(142 76% 36%)" name="Non-Current Assets" />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    {/* Summary Table */}
+                    {comparisonData && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Detailed Comparison</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-6">
+                            {/* Profit & Loss Comparison */}
+                            <div>
+                              <h3 className="font-semibold mb-4">Profit & Loss</h3>
+                              <div className="border rounded-lg overflow-hidden">
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>Category</TableHead>
+                                      {comparisonPeriods.map((period) => (
+                                        <TableHead key={period.label} className="text-right">
+                                          {period.label}
+                                        </TableHead>
+                                      ))}
+                                      <TableHead className="text-right">Variance</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    <TableRow>
+                                      <TableCell className="font-medium">Total Revenue</TableCell>
+                                      {comparisonPeriods.map((period) => (
+                                        <TableCell key={period.label} className="text-right">
+                                          {formatCurrency(comparisonData.profitAndLoss[period.label]?.totalRevenue || 0)}
+                                        </TableCell>
+                                      ))}
+                                      <TableCell className="text-right">
+                                        {comparisonPeriods.length === 2 && (
+                                          <span
+                                            className={
+                                              (comparisonData.profitAndLoss[comparisonPeriods[0].label]?.totalRevenue || 0) >
+                                              (comparisonData.profitAndLoss[comparisonPeriods[1].label]?.totalRevenue || 0)
+                                                ? "text-green-600"
+                                                : "text-destructive"
+                                            }
+                                          >
+                                            {formatCurrency(
+                                              (comparisonData.profitAndLoss[comparisonPeriods[0].label]?.totalRevenue || 0) -
+                                                (comparisonData.profitAndLoss[comparisonPeriods[1].label]?.totalRevenue || 0)
+                                            )}
+                                          </span>
+                                        )}
+                                      </TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell className="font-medium">Total COGS</TableCell>
+                                      {comparisonPeriods.map((period) => (
+                                        <TableCell key={period.label} className="text-right">
+                                          {formatCurrency(comparisonData.profitAndLoss[period.label]?.totalCOGS || 0)}
+                                        </TableCell>
+                                      ))}
+                                      <TableCell className="text-right">
+                                        {comparisonPeriods.length === 2 && (
+                                          <span
+                                            className={
+                                              (comparisonData.profitAndLoss[comparisonPeriods[0].label]?.totalCOGS || 0) <
+                                              (comparisonData.profitAndLoss[comparisonPeriods[1].label]?.totalCOGS || 0)
+                                                ? "text-green-600"
+                                                : "text-destructive"
+                                            }
+                                          >
+                                            {formatCurrency(
+                                              (comparisonData.profitAndLoss[comparisonPeriods[0].label]?.totalCOGS || 0) -
+                                                (comparisonData.profitAndLoss[comparisonPeriods[1].label]?.totalCOGS || 0)
+                                            )}
+                                          </span>
+                                        )}
+                                      </TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell className="font-medium">Gross Profit</TableCell>
+                                      {comparisonPeriods.map((period) => (
+                                        <TableCell key={period.label} className="text-right font-semibold">
+                                          {formatCurrency(comparisonData.profitAndLoss[period.label]?.grossProfit || 0)}
+                                        </TableCell>
+                                      ))}
+                                      <TableCell className="text-right font-semibold">
+                                        {comparisonPeriods.length === 2 && (
+                                          <span
+                                            className={
+                                              (comparisonData.profitAndLoss[comparisonPeriods[0].label]?.grossProfit || 0) >
+                                              (comparisonData.profitAndLoss[comparisonPeriods[1].label]?.grossProfit || 0)
+                                                ? "text-green-600"
+                                                : "text-destructive"
+                                            }
+                                          >
+                                            {formatCurrency(
+                                              (comparisonData.profitAndLoss[comparisonPeriods[0].label]?.grossProfit || 0) -
+                                                (comparisonData.profitAndLoss[comparisonPeriods[1].label]?.grossProfit || 0)
+                                            )}
+                                          </span>
+                                        )}
+                                      </TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell className="font-medium">Net Income</TableCell>
+                                      {comparisonPeriods.map((period) => (
+                                        <TableCell key={period.label} className="text-right font-semibold">
+                                          {formatCurrency(comparisonData.profitAndLoss[period.label]?.netIncome || 0)}
+                                        </TableCell>
+                                      ))}
+                                      <TableCell className="text-right font-semibold">
+                                        {comparisonPeriods.length === 2 && (
+                                          <span
+                                            className={
+                                              (comparisonData.profitAndLoss[comparisonPeriods[0].label]?.netIncome || 0) >
+                                              (comparisonData.profitAndLoss[comparisonPeriods[1].label]?.netIncome || 0)
+                                                ? "text-green-600"
+                                                : "text-destructive"
+                                            }
+                                          >
+                                            {formatCurrency(
+                                              (comparisonData.profitAndLoss[comparisonPeriods[0].label]?.netIncome || 0) -
+                                                (comparisonData.profitAndLoss[comparisonPeriods[1].label]?.netIncome || 0)
+                                            )}
+                                          </span>
+                                        )}
+                                      </TableCell>
+                                    </TableRow>
+                                  </TableBody>
+                                </Table>
+                              </div>
                             </div>
-                            <div className="space-y-1">
-                              <Label className="text-xs">End Date</Label>
-                              <Input
-                                type="date"
-                                value={period.endDate}
-                                onChange={e => {
-                                  const updated = [...comparisonPeriods];
-                                  updated[idx].endDate = e.target.value;
-                                  setComparisonPeriods(updated);
-                                }}
-                              />
+
+                            {/* Balance Sheet Comparison */}
+                            <div>
+                              <h3 className="font-semibold mb-4">Balance Sheet</h3>
+                              <div className="border rounded-lg overflow-hidden">
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>Category</TableHead>
+                                      {comparisonPeriods.map((period) => (
+                                        <TableHead key={period.label} className="text-right">
+                                          {period.label}
+                                        </TableHead>
+                                      ))}
+                                      <TableHead className="text-right">Variance</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    <TableRow>
+                                      <TableCell className="font-medium">Total Assets</TableCell>
+                                      {comparisonPeriods.map((period) => (
+                                        <TableCell key={period.label} className="text-right">
+                                          {formatCurrency(comparisonData.balanceSheet[period.label]?.totalAssets || 0)}
+                                        </TableCell>
+                                      ))}
+                                      <TableCell className="text-right">
+                                        {comparisonPeriods.length === 2 && (
+                                          <span
+                                            className={
+                                              (comparisonData.balanceSheet[comparisonPeriods[0].label]?.totalAssets || 0) >
+                                              (comparisonData.balanceSheet[comparisonPeriods[1].label]?.totalAssets || 0)
+                                                ? "text-green-600"
+                                                : "text-destructive"
+                                            }
+                                          >
+                                            {formatCurrency(
+                                              (comparisonData.balanceSheet[comparisonPeriods[0].label]?.totalAssets || 0) -
+                                                (comparisonData.balanceSheet[comparisonPeriods[1].label]?.totalAssets || 0)
+                                            )}
+                                          </span>
+                                        )}
+                                      </TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell className="font-medium">Total Liabilities</TableCell>
+                                      {comparisonPeriods.map((period) => (
+                                        <TableCell key={period.label} className="text-right">
+                                          {formatCurrency(comparisonData.balanceSheet[period.label]?.totalLiabilities || 0)}
+                                        </TableCell>
+                                      ))}
+                                      <TableCell className="text-right">
+                                        {comparisonPeriods.length === 2 && (
+                                          <span
+                                            className={
+                                              (comparisonData.balanceSheet[comparisonPeriods[0].label]?.totalLiabilities || 0) <
+                                              (comparisonData.balanceSheet[comparisonPeriods[1].label]?.totalLiabilities || 0)
+                                                ? "text-green-600"
+                                                : "text-destructive"
+                                            }
+                                          >
+                                            {formatCurrency(
+                                              (comparisonData.balanceSheet[comparisonPeriods[0].label]?.totalLiabilities || 0) -
+                                                (comparisonData.balanceSheet[comparisonPeriods[1].label]?.totalLiabilities || 0)
+                                            )}
+                                          </span>
+                                        )}
+                                      </TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell className="font-medium">Total Equity</TableCell>
+                                      {comparisonPeriods.map((period) => (
+                                        <TableCell key={period.label} className="text-right font-semibold">
+                                          {formatCurrency(comparisonData.balanceSheet[period.label]?.totalEquity || 0)}
+                                        </TableCell>
+                                      ))}
+                                      <TableCell className="text-right font-semibold">
+                                        {comparisonPeriods.length === 2 && (
+                                          <span
+                                            className={
+                                              (comparisonData.balanceSheet[comparisonPeriods[0].label]?.totalEquity || 0) >
+                                              (comparisonData.balanceSheet[comparisonPeriods[1].label]?.totalEquity || 0)
+                                                ? "text-green-600"
+                                                : "text-destructive"
+                                            }
+                                          >
+                                            {formatCurrency(
+                                              (comparisonData.balanceSheet[comparisonPeriods[0].label]?.totalEquity || 0) -
+                                                (comparisonData.balanceSheet[comparisonPeriods[1].label]?.totalEquity || 0)
+                                            )}
+                                          </span>
+                                        )}
+                                      </TableCell>
+                                    </TableRow>
+                                  </TableBody>
+                                </Table>
+                              </div>
                             </div>
                           </div>
                         </CardContent>
                       </Card>
-                    ))}
+                    )}
+
+                    {!comparisonData && (
+                      <div className="text-center py-12 text-muted-foreground">
+                        Select periods above and click "Generate Comparison" to view charts and analysis
+                      </div>
+                    )}
                   </div>
-
-                  {/* Comparison Results */}
-                  {comparisonData && (
-                    <div className="space-y-6">
-                      {/* Profit & Loss Comparison */}
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>Profit & Loss Comparison</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="border rounded-lg overflow-hidden">
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>Metric</TableHead>
-                                  {comparisonPeriods.map((period, idx) => (
-                                    <TableHead key={idx} className="text-right">
-                                      {period.label}
-                                    </TableHead>
-                                  ))}
-                                  <TableHead className="text-right">Variance</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                <TableRow>
-                                  <TableCell className="font-medium">Revenue</TableCell>
-                                  {comparisonPeriods.map((period, idx) => (
-                                    <TableCell key={idx} className="text-right">
-                                      {formatCurrency(comparisonData.profitAndLoss[period.label]?.revenue || 0)}
-                                    </TableCell>
-                                  ))}
-                                  <TableCell className="text-right font-semibold">
-                                    {comparisonPeriods.length === 2 && (
-                                      <>
-                                        {formatCurrency(
-                                          (comparisonData.profitAndLoss[comparisonPeriods[0].label]?.revenue || 0) -
-                                            (comparisonData.profitAndLoss[comparisonPeriods[1].label]?.revenue || 0)
-                                        )}
-                                      </>
-                                    )}
-                                  </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                  <TableCell className="font-medium">COGS</TableCell>
-                                  {comparisonPeriods.map((period, idx) => (
-                                    <TableCell key={idx} className="text-right">
-                                      {formatCurrency(comparisonData.profitAndLoss[period.label]?.cogs || 0)}
-                                    </TableCell>
-                                  ))}
-                                  <TableCell className="text-right font-semibold">
-                                    {comparisonPeriods.length === 2 && (
-                                      <>
-                                        {formatCurrency(
-                                          (comparisonData.profitAndLoss[comparisonPeriods[0].label]?.cogs || 0) -
-                                            (comparisonData.profitAndLoss[comparisonPeriods[1].label]?.cogs || 0)
-                                        )}
-                                      </>
-                                    )}
-                                  </TableCell>
-                                </TableRow>
-                                <TableRow className="bg-muted/50">
-                                  <TableCell className="font-bold">Gross Profit</TableCell>
-                                  {comparisonPeriods.map((period, idx) => (
-                                    <TableCell key={idx} className="text-right font-bold">
-                                      {formatCurrency(comparisonData.profitAndLoss[period.label]?.grossProfit || 0)}
-                                    </TableCell>
-                                  ))}
-                                  <TableCell className="text-right font-bold text-green-600">
-                                    {comparisonPeriods.length === 2 && (
-                                      <>
-                                        {formatCurrency(
-                                          (comparisonData.profitAndLoss[comparisonPeriods[0].label]?.grossProfit || 0) -
-                                            (comparisonData.profitAndLoss[comparisonPeriods[1].label]?.grossProfit || 0)
-                                        )}
-                                      </>
-                                    )}
-                                  </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                  <TableCell className="font-medium">Operating Expenses</TableCell>
-                                  {comparisonPeriods.map((period, idx) => (
-                                    <TableCell key={idx} className="text-right">
-                                      {formatCurrency(comparisonData.profitAndLoss[period.label]?.expenses || 0)}
-                                    </TableCell>
-                                  ))}
-                                  <TableCell className="text-right font-semibold">
-                                    {comparisonPeriods.length === 2 && (
-                                      <>
-                                        {formatCurrency(
-                                          (comparisonData.profitAndLoss[comparisonPeriods[0].label]?.expenses || 0) -
-                                            (comparisonData.profitAndLoss[comparisonPeriods[1].label]?.expenses || 0)
-                                        )}
-                                      </>
-                                    )}
-                                  </TableCell>
-                                </TableRow>
-                                <TableRow className="bg-muted/50">
-                                  <TableCell className="font-bold">Net Income</TableCell>
-                                  {comparisonPeriods.map((period, idx) => (
-                                    <TableCell key={idx} className="text-right font-bold">
-                                      {formatCurrency(comparisonData.profitAndLoss[period.label]?.netIncome || 0)}
-                                    </TableCell>
-                                  ))}
-                                  <TableCell className="text-right font-bold text-green-600">
-                                    {comparisonPeriods.length === 2 && (
-                                      <>
-                                        {formatCurrency(
-                                          (comparisonData.profitAndLoss[comparisonPeriods[0].label]?.netIncome || 0) -
-                                            (comparisonData.profitAndLoss[comparisonPeriods[1].label]?.netIncome || 0)
-                                        )}
-                                      </>
-                                    )}
-                                  </TableCell>
-                                </TableRow>
-                              </TableBody>
-                            </Table>
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      {/* Balance Sheet Comparison */}
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>Balance Sheet Comparison</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="border rounded-lg overflow-hidden">
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>Metric</TableHead>
-                                  {comparisonPeriods.map((period, idx) => (
-                                    <TableHead key={idx} className="text-right">
-                                      {period.label}
-                                    </TableHead>
-                                  ))}
-                                  <TableHead className="text-right">Variance</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                <TableRow>
-                                  <TableCell className="font-medium">Total Assets</TableCell>
-                                  {comparisonPeriods.map((period, idx) => (
-                                    <TableCell key={idx} className="text-right">
-                                      {formatCurrency(comparisonData.balanceSheet[period.label]?.totalAssets || 0)}
-                                    </TableCell>
-                                  ))}
-                                  <TableCell className="text-right font-semibold">
-                                    {comparisonPeriods.length === 2 && (
-                                      <>
-                                        {formatCurrency(
-                                          (comparisonData.balanceSheet[comparisonPeriods[0].label]?.totalAssets || 0) -
-                                            (comparisonData.balanceSheet[comparisonPeriods[1].label]?.totalAssets || 0)
-                                        )}
-                                      </>
-                                    )}
-                                  </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                  <TableCell className="font-medium">Total Liabilities</TableCell>
-                                  {comparisonPeriods.map((period, idx) => (
-                                    <TableCell key={idx} className="text-right">
-                                      {formatCurrency(comparisonData.balanceSheet[period.label]?.totalLiabilities || 0)}
-                                    </TableCell>
-                                  ))}
-                                  <TableCell className="text-right font-semibold">
-                                    {comparisonPeriods.length === 2 && (
-                                      <>
-                                        {formatCurrency(
-                                          (comparisonData.balanceSheet[comparisonPeriods[0].label]?.totalLiabilities ||
-                                            0) -
-                                            (comparisonData.balanceSheet[comparisonPeriods[1].label]?.totalLiabilities || 0)
-                                        )}
-                                      </>
-                                    )}
-                                  </TableCell>
-                                </TableRow>
-                                <TableRow className="bg-muted/50">
-                                  <TableCell className="font-bold">Total Equity</TableCell>
-                                  {comparisonPeriods.map((period, idx) => (
-                                    <TableCell key={idx} className="text-right font-bold">
-                                      {formatCurrency(comparisonData.balanceSheet[period.label]?.totalEquity || 0)}
-                                    </TableCell>
-                                  ))}
-                                  <TableCell className="text-right font-bold text-green-600">
-                                    {comparisonPeriods.length === 2 && (
-                                      <>
-                                        {formatCurrency(
-                                          (comparisonData.balanceSheet[comparisonPeriods[0].label]?.totalEquity || 0) -
-                                            (comparisonData.balanceSheet[comparisonPeriods[1].label]?.totalEquity || 0)
-                                        )}
-                                      </>
-                                    )}
-                                  </TableCell>
-                                </TableRow>
-                              </TableBody>
-                            </Table>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  )}
-
-                  {!comparisonData && (
-                    <div className="text-center py-12 text-muted-foreground">
-                      <p>Click "Generate Comparison" to compare financial statements across periods</p>
-                    </div>
-                  )}
-                </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
