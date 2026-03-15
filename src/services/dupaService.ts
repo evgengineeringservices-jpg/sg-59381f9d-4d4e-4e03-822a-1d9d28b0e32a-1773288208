@@ -781,19 +781,21 @@ export async function syncDUPAWithMarketPrices(dupaItemId: string): Promise<{ su
   if (matError || !materials || materials.length === 0) return { success: true, updatedCount: 0 };
 
   // 2. Get all market prices
-  const { data: marketPrices, error: mpError } = await supabase
+  const { data: marketPricesData, error: mpError } = await supabase
     .from("market_prices" as any)
     .select("*")
     .order("effective_date", { ascending: false });
     
-  if (mpError || !marketPrices || marketPrices.length === 0) return { success: true, updatedCount: 0 };
+  const marketPrices = (marketPricesData as any[]) || [];
+  
+  if (mpError || marketPrices.length === 0) return { success: true, updatedCount: 0 };
 
   let updatedCount = 0;
 
   // 3. For each material, find latest market price
   for (const mat of materials) {
     // Try to find an exact or partial match in market prices
-    const match = marketPrices.find(mp => 
+    const match = marketPrices.find((mp: any) => 
       mp.item_name.toLowerCase() === mat.material_name.toLowerCase() ||
       mat.material_name.toLowerCase().includes(mp.item_name.toLowerCase()) ||
       mp.item_name.toLowerCase().includes(mat.material_name.toLowerCase())
