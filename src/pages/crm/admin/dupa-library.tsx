@@ -53,6 +53,7 @@ import {
   deleteDUPAItem,
   calculateDUPACosts,
   syncDUPAWithMarketPrices,
+  importDUPAFromExcel,
 } from "@/services/dupaService";
 import { formatPeso } from "@/lib/boqCalculations";
 import { BOQ_CATEGORIES, DPWH_UNITS } from "@/constants";
@@ -78,7 +79,18 @@ export default function DUPALibraryPage() {
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
   const [calculatedCost, setCalculatedCost] = useState<any>(null);
   const [syncingPrices, setSyncingPrices] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = typeof window !== "undefined" ? document.createElement("input") : null;
   const { toast } = useToast();
+
+  // Setup file input for Excel import
+  useEffect(() => {
+    if (fileInputRef) {
+      fileInputRef.type = "file";
+      fileInputRef.accept = ".xlsx, .xls, .csv";
+      fileInputRef.onchange = handleFileUpload;
+    }
+  }, []);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -169,6 +181,40 @@ export default function DUPALibraryPage() {
       toast({ title: "Failed to sync market prices", variant: "destructive" });
     } finally {
       setSyncingPrices(false);
+    }
+  }
+
+  async function handleFileUpload(event: any) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setImporting(true);
+      toast({ title: "Importing DUPA items...", description: "Please wait while we process the file." });
+      
+      const buffer = await file.arrayBuffer();
+      const result = await importDUPAFromExcel(buffer);
+
+      if (result.success > 0) {
+        toast({ 
+          title: "Import Successful", 
+          description: `Successfully imported ${result.success} DUPA items. Failed: ${result.failed}` 
+        });
+        await loadDUPAItems();
+      } else {
+        toast({ 
+          title: "Import Failed", 
+          description: result.errors[0] || "Failed to import items", 
+          variant: "destructive" 
+        });
+      }
+    } catch (error) {
+      console.error("Import error:", error);
+      toast({ title: "Import Failed", description: "An unexpected error occurred", variant: "destructive" });
+    } finally {
+      setImporting(false);
+      // Reset file input
+      if (fileInputRef) fileInputRef.value = "";
     }
   }
 
@@ -306,9 +352,17 @@ export default function DUPALibraryPage() {
               <Download className="h-4 w-4 mr-2" />
               Export
             </Button>
-            <Button variant="outline">
-              <Upload className="h-4 w-4 mr-2" />
-              Import
+            <Button 
+              variant="outline" 
+              onClick={() => fileInputRef?.click()}
+              disabled={importing}
+            >
+              {importing ? (
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Upload className="h-4 w-4 mr-2" />
+              )}
+              {importing ? "Importing..." : "Import"}
             </Button>
             <Button onClick={() => setShowDialog(true)}>
               <Plus className="h-4 w-4 mr-2" />
