@@ -318,13 +318,17 @@ export type Database = {
           description: string
           dpwh_item_code: string
           dupa_item_id: string | null
+          equipment_cost: number | null
           id: string
           item_no: string
           labor_cost: number
+          mark_up_amount: number | null
           material_cost: number
+          ocm_percent: number | null
           project_id: string
           quantity: number
           total_cost: number
+          total_with_markup: number | null
           unit: string
           unit_cost: number
           updated_at: string
@@ -336,13 +340,17 @@ export type Database = {
           description: string
           dpwh_item_code?: string
           dupa_item_id?: string | null
+          equipment_cost?: number | null
           id?: string
           item_no: string
           labor_cost?: number
+          mark_up_amount?: number | null
           material_cost?: number
+          ocm_percent?: number | null
           project_id: string
           quantity?: number
           total_cost?: number
+          total_with_markup?: number | null
           unit: string
           unit_cost?: number
           updated_at?: string
@@ -354,13 +362,17 @@ export type Database = {
           description?: string
           dpwh_item_code?: string
           dupa_item_id?: string | null
+          equipment_cost?: number | null
           id?: string
           item_no?: string
           labor_cost?: number
+          mark_up_amount?: number | null
           material_cost?: number
+          ocm_percent?: number | null
           project_id?: string
           quantity?: number
           total_cost?: number
+          total_with_markup?: number | null
           unit?: string
           unit_cost?: number
           updated_at?: string
@@ -1303,15 +1315,18 @@ export type Database = {
           id: string
           location: string
           name: string
+          ocm_percent: number | null
           pcab_category: string
           permit_no: string
           permit_status: string
+          profit_percent: number | null
           progress: number
           project_type: string
           spent: number
           start_date: string
           status: string
           updated_at: string
+          vat_percent: number | null
         }
         Insert: {
           budget?: number
@@ -1324,15 +1339,18 @@ export type Database = {
           id?: string
           location?: string
           name: string
+          ocm_percent?: number | null
           pcab_category?: string
           permit_no?: string
           permit_status?: string
+          profit_percent?: number | null
           progress?: number
           project_type?: string
           spent?: number
           start_date: string
           status?: string
           updated_at?: string
+          vat_percent?: number | null
         }
         Update: {
           budget?: number
@@ -1345,15 +1363,18 @@ export type Database = {
           id?: string
           location?: string
           name?: string
+          ocm_percent?: number | null
           pcab_category?: string
           permit_no?: string
           permit_status?: string
+          profit_percent?: number | null
           progress?: number
           project_type?: string
           spent?: number
           start_date?: string
           status?: string
           updated_at?: string
+          vat_percent?: number | null
         }
         Relationships: []
       }
@@ -1772,6 +1793,10 @@ export type Database = {
           total_cost_change: number
           updated_count: number
         }[]
+      }
+      seed_estimate_items: {
+        Args: { p_project_id: string }
+        Returns: undefined
       }
       suggest_market_prices_for_boq: {
         Args: { p_category: string; p_description: string; p_unit: string }
