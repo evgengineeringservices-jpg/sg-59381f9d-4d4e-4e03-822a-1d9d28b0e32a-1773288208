@@ -5,6 +5,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import type { DPWHUnit, BOQCategory } from "@/types";
+import * as XLSX from "xlsx";
 
 export interface DUPAItem {
   id: string;
@@ -617,4 +618,84 @@ export async function bulkImportDUPAItems(items: Array<{
   }
 
   return { success, failed, errors };
+}
+
+/**
+ * Parse and import DUPA items from an Excel/CSV file buffer
+ */
+export async function importDUPAFromExcel(fileBuffer: ArrayBuffer): Promise<{ success: number; failed: number; errors: string[] }> {
+  try {
+    const workbook = XLSX.read(fileBuffer, { type: 'array' });
+    const firstSheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[firstSheetName];
+    
+    // Convert to JSON
+    const jsonData = XLSX.utils.sheet_to_json(worksheet);
+    
+    // Group rows by Item Code since an item might span multiple rows for its materials/labor/equipment
+    const groupedItems: Record<string, any> = {};
+    
+    for (const row of jsonData as any[]) {
+      const itemCode = row['Item Code'] || row['Item_Code'] || row['ItemCode'];
+      if (!itemCode) continue;
+      
+      if (!groupedItems[itemCode]) {
+        groupedItems[itemCode] = {
+          itemCode: String(itemCode),
+          description: row['Description'] || 'Standard Item',
+          category: row['Category'] || 'General',
+          unit: String(row['Unit'] || 'sq_m').toLowerCase() as DPWHUnit,
+          baseUnitCost: 0,
+          materials: [],
+          labor: [],
+          equipment: []
+        };
+      }
+      
+      // Add Material if present
+      if (row['Material Name']) {
+        groupedItems[itemCode].materials.push({
+          materialName: String(row['Material Name']),
+          coefficient: Number(row['Material Quantity'] || row['Material Coeff'] || 0),
+          unit: String(row['Material Unit'] || 'pcs').toLowerCase() as DPWHUnit,
+          unitPrice: Number(row['Material Rate'] || row['Material Price'] || 0),
+          wastePercentage: Number(row['Waste %'] || 0)
+        });
+      }
+      
+      // Add Labor if present
+      if (row['Labor Type']) {
+        groupedItems[itemCode].labor.push({
+          laborType: String(row['Labor Type']),
+          coefficient: Number(row['Labor Hours'] || row['Labor Coeff'] || 0),
+          hourlyRate: Number(row['Labor Rate'] || 0)
+        });
+      }
+      
+      // Add Equipment if present
+      if (row['Equipment Name']) {
+        groupedItems[itemCode].equipment.push({
+          equipmentName: String(row['Equipment Name']),
+          coefficient: Number(row['Equipment Hours'] || row['Equipment Coeff'] || 0),
+          hourlyRate: Number(row['Equipment Rate'] || 0)
+        });
+      }
+    }
+    
+    const formattedItems = Object.values(groupedItems);
+    
+    if (formattedItems.length === 0) {
+      return { success: 0, failed: 1, errors: ["No valid DUPA items found in the file. Make sure the 'Item Code' column exists."] };
+    }
+    
+    // Use existing bulk import
+    return await bulkImportDUPAItems(formattedItems as any);
+  } catch (error) {
+    console.error("Excel parsing error:", error);
+    return {
+      success: 0,
+      failed: 1,
+      errors: [error instanceof Error ? error.message : "Failed to parse Excel file"]
+    };
+  }
 }
