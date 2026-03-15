@@ -310,6 +310,7 @@ export interface BOQItem {
   projectId: string;
   itemNo: string;
   dpwhItemCode: string | null;
+  dupaItemId?: string | null;
   description: string;
   category: BOQCategory;
   unit: DPWHUnit;
@@ -317,8 +318,10 @@ export interface BOQItem {
   unitCost: number;
   laborCost: number;
   materialCost: number;
+  equipmentCost?: number;
   total: number;
   markup: number;
+  costSource?: "dupa" | "manual" | "market" | "calculated";
   createdAt: string;
   updatedAt: string;
 }
@@ -597,4 +600,47 @@ export interface EquityAccount {
   description?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+// DUPA-specific types
+export interface DUPAItem {
+  id: string;
+  itemCode: string;
+  description: string;
+  category: string;
+  unit: DPWHUnit;
+  baseUnitCost: number;
+  isActive: boolean;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DUPAMaterialAnalysis {
+  id: string;
+  dupaItemId: string;
+  materialName: string;
+  coefficient: number;
+  unit: DPWHUnit;
+  unitPrice: number;
+  wastePercentage: number;
+  notes?: string;
+}
+
+export interface DUPALaborAnalysis {
+  id: string;
+  dupaItemId: string;
+  laborType: string;
+  coefficient: number;
+  hourlyRate: number;
+  notes?: string;
+}
+
+export interface DUPAEquipmentAnalysis {
+  id: string;
+  dupaItemId: string;
+  equipmentName: string;
+  coefficient: number;
+  hourlyRate: number;
+  notes?: string;
 }
