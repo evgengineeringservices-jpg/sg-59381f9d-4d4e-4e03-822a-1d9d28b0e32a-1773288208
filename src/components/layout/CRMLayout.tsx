@@ -27,6 +27,7 @@ import {
   ChevronRight,
   Search,
   Building2,
+  BarChart3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -62,6 +63,7 @@ const operationsNavItems: NavItem[] = [
   { icon: Truck, label: "Weekly Logistics", href: "/crm/logistics" },
   { icon: CreditCard, label: "Billing", href: "/crm/billing" },
   { icon: Landmark, label: "Accounting", href: "/crm/accounting", roles: ["super_admin", "owner", "contractor_admin"] },
+  { icon: BarChart3, label: "Cost Analysis", href: "/crm/cost-analysis" },
   { icon: FileImage, label: "Documents", href: "/crm/documents" },
   { icon: Image, label: "Drawings", href: "/crm/drawings" },
 ];
@@ -70,6 +72,7 @@ const adminNavItems: NavItem[] = [
   { icon: UserCog, label: "Users & Roles", href: "/crm/admin/users", roles: ["super_admin", "owner"] },
   { icon: Settings, label: "Settings", href: "/crm/admin/settings", roles: ["super_admin", "owner", "contractor_admin"] },
   { icon: TrendingDown, label: "Market Prices", href: "/crm/admin/market-prices", roles: ["super_admin", "owner", "contractor_admin"] },
+  { icon: Calculator, label: "DUPA Library", href: "/crm/admin/dupa-library", roles: ["super_admin", "owner", "contractor_admin"] },
 ];
 
 export function CRMLayout({ children }: { children: React.ReactNode }) {
