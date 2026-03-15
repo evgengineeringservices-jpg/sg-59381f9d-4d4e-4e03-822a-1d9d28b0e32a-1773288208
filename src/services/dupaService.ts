@@ -77,6 +77,114 @@ export interface DUPACalculationResult {
   };
 }
 
+export interface DUPASearchFilters {
+  searchTerm?: string;
+  category?: string;
+  unit?: DPWHUnit;
+  minCost?: number;
+  maxCost?: number;
+  materialNames?: string[];
+  sortBy?: "itemCode" | "description" | "category" | "baseUnitCost" | "updatedAt";
+  sortOrder?: "asc" | "desc";
+}
+
+/**
+ * Advanced search and filtering for DUPA items
+ */
+export async function searchDUPAItems(filters: DUPASearchFilters, params?: {
+  page?: number;
+  limit?: number;
+}): Promise<{ items: DUPAItem[]; total: number }> {
+  const { page = 1, limit = 50 } = params || {};
+  const offset = (page - 1) * limit;
+
+  let query = supabase
+    .from("dupa_items" as any)
+    .select("*", { count: "exact" })
+    .eq("is_active", true);
+
+  // Apply filters
+  if (filters.searchTerm) {
+    query = query.or(
+      `item_code.ilike.%${filters.searchTerm}%,description.ilike.%${filters.searchTerm}%,notes.ilike.%${filters.searchTerm}%`
+    );
+  }
+
+  if (filters.category) {
+    query = query.eq("category", filters.category);
+  }
+
+  if (filters.unit) {
+    query = query.eq("unit", filters.unit);
+  }
+
+  if (filters.minCost !== undefined) {
+    query = query.gte("base_unit_cost", filters.minCost);
+  }
+
+  if (filters.maxCost !== undefined) {
+    query = query.lte("base_unit_cost", filters.maxCost);
+  }
+
+  // Sort
+  const sortBy = filters.sortBy || "item_code";
+  const sortOrder = filters.sortOrder || "asc";
+  const dbColumn = sortBy === "itemCode" ? "item_code" : 
+                   sortBy === "baseUnitCost" ? "base_unit_cost" :
+                   sortBy === "updatedAt" ? "updated_at" : sortBy;
+  
+  query = query.order(dbColumn, { ascending: sortOrder === "asc" });
+
+  // Pagination
+  query = query.range(offset, offset + limit - 1);
+
+  const { data, error, count } = await query;
+
+  if (error) {
+    console.error("Error searching DUPA items:", error);
+    throw error;
+  }
+
+  let items = ((data as any[]) || []).map((item) => ({
+    id: item.id,
+    itemCode: item.item_code,
+    description: item.description,
+    category: item.category,
+    unit: item.unit as DPWHUnit,
+    baseUnitCost: Number(item.base_unit_cost),
+    isActive: item.is_active,
+    notes: item.notes || undefined,
+    createdAt: item.created_at,
+    updatedAt: item.updated_at,
+  }));
+
+  // Filter by material names if specified
+  if (filters.materialNames && filters.materialNames.length > 0) {
+    const itemsWithMaterials = await Promise.all(
+      items.map(async (item) => {
+        const { data: materials } = await supabase
+          .from("dupa_material_analysis" as any)
+          .select("material_name")
+          .eq("dupa_item_id", item.id);
+
+        const materialNames = (materials as any[] || []).map(m => m.material_name.toLowerCase());
+        const hasAllMaterials = filters.materialNames!.every(filterMat =>
+          materialNames.some(mat => mat.includes(filterMat.toLowerCase()))
+        );
+
+        return hasAllMaterials ? item : null;
+      })
+    );
+
+    items = itemsWithMaterials.filter(item => item !== null) as DUPAItem[];
+  }
+
+  return {
+    items,
+    total: count || 0,
+  };
+}
+
 /**
  * Get all DUPA items with pagination and filtering
  */
@@ -282,16 +390,19 @@ export async function calculateDUPACosts(
 }
 
 /**
- * Create a new DUPA item
+ * Create a new DUPA item with full analysis
  */
 export async function createDUPAItem(item: {
   itemCode: string;
   description: string;
   category: string;
   unit: DPWHUnit;
-  baseUnitCost?: number;
   notes?: string;
+  materials?: Array<Omit<DUPAMaterialAnalysis, "id" | "dupaItemId">>;
+  labor?: Array<Omit<DUPALaborAnalysis, "id" | "dupaItemId">>;
+  equipment?: Array<Omit<DUPAEquipmentAnalysis, "id" | "dupaItemId">>;
 }): Promise<DUPAItem | null> {
+  // Create DUPA item
   const { data, error } = await supabase
     .from("dupa_items" as any)
     .insert({
@@ -299,7 +410,7 @@ export async function createDUPAItem(item: {
       description: item.description,
       category: item.category,
       unit: item.unit,
-      base_unit_cost: item.baseUnitCost || 0,
+      base_unit_cost: 0,
       notes: item.notes,
     })
     .select()
@@ -311,13 +422,77 @@ export async function createDUPAItem(item: {
   }
 
   const res = data as any;
+  const dupaItemId = res.id;
+
+  // Add materials
+  if (item.materials && item.materials.length > 0) {
+    const materialsData = item.materials.map(m => ({
+      dupa_item_id: dupaItemId,
+      material_name: m.materialName,
+      coefficient: m.coefficient,
+      unit: m.unit,
+      unit_price: m.unitPrice,
+      waste_percentage: m.wastePercentage || 0,
+      notes: m.notes,
+    }));
+
+    const { error: matError } = await supabase
+      .from("dupa_material_analysis" as any)
+      .insert(materialsData);
+
+    if (matError) console.error("Error adding materials:", matError);
+  }
+
+  // Add labor
+  if (item.labor && item.labor.length > 0) {
+    const laborData = item.labor.map(l => ({
+      dupa_item_id: dupaItemId,
+      labor_type: l.laborType,
+      coefficient: l.coefficient,
+      hourly_rate: l.hourlyRate,
+      notes: l.notes,
+    }));
+
+    const { error: labError } = await supabase
+      .from("dupa_labor_analysis" as any)
+      .insert(laborData);
+
+    if (labError) console.error("Error adding labor:", labError);
+  }
+
+  // Add equipment
+  if (item.equipment && item.equipment.length > 0) {
+    const equipData = item.equipment.map(e => ({
+      dupa_item_id: dupaItemId,
+      equipment_name: e.equipmentName,
+      coefficient: e.coefficient,
+      hourly_rate: e.hourlyRate,
+      notes: e.notes,
+    }));
+
+    const { error: eqError } = await supabase
+      .from("dupa_equipment_analysis" as any)
+      .insert(equipData);
+
+    if (eqError) console.error("Error adding equipment:", eqError);
+  }
+
+  // Calculate and update base unit cost
+  const costCalc = await calculateDUPACosts(dupaItemId, 1);
+  if (costCalc) {
+    await supabase
+      .from("dupa_items" as any)
+      .update({ base_unit_cost: costCalc.unitCost })
+      .eq("id", dupaItemId);
+  }
+
   return {
     id: res.id,
     itemCode: res.item_code,
     description: res.description,
     category: res.category,
     unit: res.unit as DPWHUnit,
-    baseUnitCost: Number(res.base_unit_cost),
+    baseUnitCost: costCalc?.unitCost || 0,
     isActive: res.is_active,
     notes: res.notes || undefined,
     createdAt: res.created_at,
@@ -446,7 +621,7 @@ export async function addDUPAEquipment(equipment: {
 }
 
 /**
- * Update DUPA item
+ * Update DUPA item with full analysis
  */
 export async function updateDUPAItem(
   id: string,
@@ -455,9 +630,10 @@ export async function updateDUPAItem(
     description: string;
     category: string;
     unit: DPWHUnit;
-    baseUnitCost: number;
-    isActive: boolean;
     notes: string;
+    materials: Array<Omit<DUPAMaterialAnalysis, "id" | "dupaItemId">>;
+    labor: Array<Omit<DUPALaborAnalysis, "id" | "dupaItemId">>;
+    equipment: Array<Omit<DUPAEquipmentAnalysis, "id" | "dupaItemId">>;
   }>
 ): Promise<DUPAItem | null> {
   const updateData: any = {};
@@ -466,10 +642,9 @@ export async function updateDUPAItem(
   if (updates.description !== undefined) updateData.description = updates.description;
   if (updates.category !== undefined) updateData.category = updates.category;
   if (updates.unit !== undefined) updateData.unit = updates.unit;
-  if (updates.baseUnitCost !== undefined) updateData.base_unit_cost = updates.baseUnitCost;
-  if (updates.isActive !== undefined) updateData.is_active = updates.isActive;
   if (updates.notes !== undefined) updateData.notes = updates.notes;
 
+  // Update basic item data
   const { data, error } = await supabase
     .from("dupa_items" as any)
     .update(updateData)
@@ -482,6 +657,85 @@ export async function updateDUPAItem(
     throw error;
   }
 
+  // Update materials if provided
+  if (updates.materials !== undefined) {
+    // Delete existing materials
+    await supabase
+      .from("dupa_material_analysis" as any)
+      .delete()
+      .eq("dupa_item_id", id);
+
+    // Insert new materials
+    if (updates.materials.length > 0) {
+      const materialsData = updates.materials.map(m => ({
+        dupa_item_id: id,
+        material_name: m.materialName,
+        coefficient: m.coefficient,
+        unit: m.unit,
+        unit_price: m.unitPrice,
+        waste_percentage: m.wastePercentage || 0,
+        notes: m.notes,
+      }));
+
+      await supabase
+        .from("dupa_material_analysis" as any)
+        .insert(materialsData);
+    }
+  }
+
+  // Update labor if provided
+  if (updates.labor !== undefined) {
+    await supabase
+      .from("dupa_labor_analysis" as any)
+      .delete()
+      .eq("dupa_item_id", id);
+
+    if (updates.labor.length > 0) {
+      const laborData = updates.labor.map(l => ({
+        dupa_item_id: id,
+        labor_type: l.laborType,
+        coefficient: l.coefficient,
+        hourly_rate: l.hourlyRate,
+        notes: l.notes,
+      }));
+
+      await supabase
+        .from("dupa_labor_analysis" as any)
+        .insert(laborData);
+    }
+  }
+
+  // Update equipment if provided
+  if (updates.equipment !== undefined) {
+    await supabase
+      .from("dupa_equipment_analysis" as any)
+      .delete()
+      .eq("dupa_item_id", id);
+
+    if (updates.equipment.length > 0) {
+      const equipData = updates.equipment.map(e => ({
+        dupa_item_id: id,
+        equipment_name: e.equipmentName,
+        coefficient: e.coefficient,
+        hourly_rate: e.hourlyRate,
+        notes: e.notes,
+      }));
+
+      await supabase
+        .from("dupa_equipment_analysis" as any)
+        .insert(equipData);
+    }
+  }
+
+  // Recalculate base unit cost
+  const costCalc = await calculateDUPACosts(id, 1);
+  if (costCalc) {
+    await supabase
+      .from("dupa_items" as any)
+      .update({ base_unit_cost: costCalc.unitCost })
+      .eq("id", id);
+  }
+
   const res = data as any;
   return {
     id: res.id,
@@ -489,7 +743,7 @@ export async function updateDUPAItem(
     description: res.description,
     category: res.category,
     unit: res.unit as DPWHUnit,
-    baseUnitCost: Number(res.base_unit_cost),
+    baseUnitCost: costCalc?.unitCost || Number(res.base_unit_cost),
     isActive: res.is_active,
     notes: res.notes || undefined,
     createdAt: res.created_at,
@@ -565,50 +819,16 @@ export async function bulkImportDUPAItems(items: Array<{
 
   for (const item of items) {
     try {
-      // Create DUPA item
-      const dupaItem = await createDUPAItem({
+      await createDUPAItem({
         itemCode: item.itemCode,
         description: item.description,
         category: item.category,
         unit: item.unit,
-        baseUnitCost: item.baseUnitCost,
+        notes: "",
+        materials: item.materials,
+        labor: item.labor,
+        equipment: item.equipment,
       });
-
-      if (!dupaItem) {
-        failed++;
-        errors.push(`Failed to create item: ${item.itemCode}`);
-        continue;
-      }
-
-      // Add materials
-      if (item.materials) {
-        for (const material of item.materials) {
-          await addDUPAMaterial({
-            dupaItemId: dupaItem.id,
-            ...material,
-          });
-        }
-      }
-
-      // Add labor
-      if (item.labor) {
-        for (const labor of item.labor) {
-          await addDUPALabor({
-            dupaItemId: dupaItem.id,
-            ...labor,
-          });
-        }
-      }
-
-      // Add equipment
-      if (item.equipment) {
-        for (const equip of item.equipment) {
-          await addDUPAEquipment({
-            dupaItemId: dupaItem.id,
-            ...equip,
-          });
-        }
-      }
 
       success++;
     } catch (error) {
@@ -625,59 +845,53 @@ export async function bulkImportDUPAItems(items: Array<{
  */
 export async function importDUPAFromExcel(fileBuffer: ArrayBuffer): Promise<{ success: number; failed: number; errors: string[] }> {
   try {
-    const workbook = XLSX.read(fileBuffer, { type: 'array' });
+    const workbook = XLSX.read(fileBuffer, { type: "array" });
     const firstSheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[firstSheetName];
     
-    // Convert to JSON
     const jsonData = XLSX.utils.sheet_to_json(worksheet);
     
-    // Group rows by Item Code since an item might span multiple rows for its materials/labor/equipment
     const groupedItems: Record<string, any> = {};
     
     for (const row of jsonData as any[]) {
-      const itemCode = row['Item Code'] || row['Item_Code'] || row['ItemCode'];
+      const itemCode = row["Item Code"] || row["Item_Code"] || row["ItemCode"];
       if (!itemCode) continue;
       
       if (!groupedItems[itemCode]) {
         groupedItems[itemCode] = {
           itemCode: String(itemCode),
-          description: row['Description'] || 'Standard Item',
-          category: row['Category'] || 'General',
-          unit: String(row['Unit'] || 'sq_m').toLowerCase() as DPWHUnit,
-          baseUnitCost: 0,
+          description: row["Description"] || "Standard Item",
+          category: row["Category"] || "General",
+          unit: String(row["Unit"] || "sq_m").toLowerCase() as DPWHUnit,
           materials: [],
           labor: [],
           equipment: []
         };
       }
       
-      // Add Material if present
-      if (row['Material Name']) {
+      if (row["Material Name"]) {
         groupedItems[itemCode].materials.push({
-          materialName: String(row['Material Name']),
-          coefficient: Number(row['Material Quantity'] || row['Material Coeff'] || 0),
-          unit: String(row['Material Unit'] || 'pcs').toLowerCase() as DPWHUnit,
-          unitPrice: Number(row['Material Rate'] || row['Material Price'] || 0),
-          wastePercentage: Number(row['Waste %'] || 0)
+          materialName: String(row["Material Name"]),
+          coefficient: Number(row["Material Quantity"] || row["Material Coeff"] || 0),
+          unit: String(row["Material Unit"] || "pcs").toLowerCase() as DPWHUnit,
+          unitPrice: Number(row["Material Rate"] || row["Material Price"] || 0),
+          wastePercentage: Number(row["Waste %"] || 0)
         });
       }
       
-      // Add Labor if present
-      if (row['Labor Type']) {
+      if (row["Labor Type"]) {
         groupedItems[itemCode].labor.push({
-          laborType: String(row['Labor Type']),
-          coefficient: Number(row['Labor Hours'] || row['Labor Coeff'] || 0),
-          hourlyRate: Number(row['Labor Rate'] || 0)
+          laborType: String(row["Labor Type"]),
+          coefficient: Number(row["Labor Hours"] || row["Labor Coeff"] || 0),
+          hourlyRate: Number(row["Labor Rate"] || 0)
         });
       }
       
-      // Add Equipment if present
-      if (row['Equipment Name']) {
+      if (row["Equipment Name"]) {
         groupedItems[itemCode].equipment.push({
-          equipmentName: String(row['Equipment Name']),
-          coefficient: Number(row['Equipment Hours'] || row['Equipment Coeff'] || 0),
-          hourlyRate: Number(row['Equipment Rate'] || 0)
+          equipmentName: String(row["Equipment Name"]),
+          coefficient: Number(row["Equipment Hours"] || row["Equipment Coeff"] || 0),
+          hourlyRate: Number(row["Equipment Rate"] || 0)
         });
       }
     }
@@ -688,7 +902,6 @@ export async function importDUPAFromExcel(fileBuffer: ArrayBuffer): Promise<{ su
       return { success: 0, failed: 1, errors: ["No valid DUPA items found in the file. Make sure the 'Item Code' column exists."] };
     }
     
-    // Use existing bulk import
     return await bulkImportDUPAItems(formattedItems as any);
   } catch (error) {
     console.error("Excel parsing error:", error);
