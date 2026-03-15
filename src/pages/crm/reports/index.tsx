@@ -87,7 +87,7 @@ export default function ReportsPage() {
       const totalCost = expenseFormData.quantity * expenseFormData.unitPrice;
       
       const { error } = await supabase
-        .from('actual_material_expenses')
+        .from('actual_material_expenses' as any)
         .insert({
           project_id: selectedProject,
           progress_report_id: reportId,

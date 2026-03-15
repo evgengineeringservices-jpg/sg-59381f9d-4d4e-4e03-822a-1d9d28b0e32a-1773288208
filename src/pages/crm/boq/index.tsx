@@ -139,7 +139,7 @@ export default function BOQPage() {
     
     try {
       const { data, error } = await supabase
-        .from('boq_actual_comparison')
+        .from('boq_actual_comparison' as any)
         .select('*')
         .eq('project_id', selectedProject);
       
