@@ -1,4 +1,4 @@
- 
+/* eslint-disable @typescript-eslint/no-empty-object-type */
 export type Json =
   | string
   | number
@@ -312,10 +312,12 @@ export type Database = {
       }
       boq_items: {
         Row: {
+          calculation_method: string | null
           category: string
           created_at: string
           description: string
           dpwh_item_code: string
+          dupa_item_id: string | null
           id: string
           item_no: string
           labor_cost: number
@@ -328,10 +330,12 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          calculation_method?: string | null
           category: string
           created_at?: string
           description: string
           dpwh_item_code?: string
+          dupa_item_id?: string | null
           id?: string
           item_no: string
           labor_cost?: number
@@ -344,10 +348,12 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          calculation_method?: string | null
           category?: string
           created_at?: string
           description?: string
           dpwh_item_code?: string
+          dupa_item_id?: string | null
           id?: string
           item_no?: string
           labor_cost?: number
@@ -360,6 +366,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "boq_items_dupa_item_id_fkey"
+            columns: ["dupa_item_id"]
+            isOneToOne: false
+            referencedRelation: "dupa_items"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "boq_items_project_id_fkey"
             columns: ["project_id"]
@@ -616,6 +629,234 @@ export type Database = {
           },
         ]
       }
+      dupa_equipment: {
+        Row: {
+          capacity: string | null
+          coefficient: number
+          created_at: string | null
+          dupa_item_id: string | null
+          equipment_code: string | null
+          equipment_name: string
+          equipment_type: string | null
+          id: string
+          notes: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          capacity?: string | null
+          coefficient: number
+          created_at?: string | null
+          dupa_item_id?: string | null
+          equipment_code?: string | null
+          equipment_name: string
+          equipment_type?: string | null
+          id?: string
+          notes?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          capacity?: string | null
+          coefficient?: number
+          created_at?: string | null
+          dupa_item_id?: string | null
+          equipment_code?: string | null
+          equipment_name?: string
+          equipment_type?: string | null
+          id?: string
+          notes?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dupa_equipment_dupa_item_id_fkey"
+            columns: ["dupa_item_id"]
+            isOneToOne: false
+            referencedRelation: "dupa_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dupa_items: {
+        Row: {
+          category: string
+          created_at: string | null
+          description: string
+          id: string
+          is_active: boolean | null
+          item_code: string
+          notes: string | null
+          specification: string | null
+          unit: string
+          updated_at: string | null
+        }
+        Insert: {
+          category: string
+          created_at?: string | null
+          description: string
+          id?: string
+          is_active?: boolean | null
+          item_code: string
+          notes?: string | null
+          specification?: string | null
+          unit: string
+          updated_at?: string | null
+        }
+        Update: {
+          category?: string
+          created_at?: string | null
+          description?: string
+          id?: string
+          is_active?: boolean | null
+          item_code?: string
+          notes?: string | null
+          specification?: string | null
+          unit?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      dupa_labor: {
+        Row: {
+          coefficient: number
+          created_at: string | null
+          dupa_item_id: string | null
+          id: string
+          labor_code: string | null
+          labor_type: string
+          notes: string | null
+          productivity_rate: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          coefficient: number
+          created_at?: string | null
+          dupa_item_id?: string | null
+          id?: string
+          labor_code?: string | null
+          labor_type: string
+          notes?: string | null
+          productivity_rate?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          coefficient?: number
+          created_at?: string | null
+          dupa_item_id?: string | null
+          id?: string
+          labor_code?: string | null
+          labor_type?: string
+          notes?: string | null
+          productivity_rate?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dupa_labor_dupa_item_id_fkey"
+            columns: ["dupa_item_id"]
+            isOneToOne: false
+            referencedRelation: "dupa_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dupa_materials: {
+        Row: {
+          coefficient: number
+          created_at: string | null
+          dupa_item_id: string | null
+          id: string
+          material_code: string | null
+          material_name: string
+          notes: string | null
+          specification: string | null
+          unit: string
+          updated_at: string | null
+          waste_factor: number | null
+        }
+        Insert: {
+          coefficient: number
+          created_at?: string | null
+          dupa_item_id?: string | null
+          id?: string
+          material_code?: string | null
+          material_name: string
+          notes?: string | null
+          specification?: string | null
+          unit: string
+          updated_at?: string | null
+          waste_factor?: number | null
+        }
+        Update: {
+          coefficient?: number
+          created_at?: string | null
+          dupa_item_id?: string | null
+          id?: string
+          material_code?: string | null
+          material_name?: string
+          notes?: string | null
+          specification?: string | null
+          unit?: string
+          updated_at?: string | null
+          waste_factor?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dupa_materials_dupa_item_id_fkey"
+            columns: ["dupa_item_id"]
+            isOneToOne: false
+            referencedRelation: "dupa_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      equipment_rates: {
+        Row: {
+          created_at: string | null
+          daily_rate: number
+          effective_date: string
+          equipment_name: string
+          equipment_type: string
+          fuel_included: boolean | null
+          hourly_rate: number
+          id: string
+          location: string | null
+          monthly_rate: number | null
+          notes: string | null
+          operator_included: boolean | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          daily_rate: number
+          effective_date: string
+          equipment_name: string
+          equipment_type: string
+          fuel_included?: boolean | null
+          hourly_rate: number
+          id?: string
+          location?: string | null
+          monthly_rate?: number | null
+          notes?: string | null
+          operator_included?: boolean | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          daily_rate?: number
+          effective_date?: string
+          equipment_name?: string
+          equipment_type?: string
+          fuel_included?: boolean | null
+          hourly_rate?: number
+          id?: string
+          location?: string | null
+          monthly_rate?: number | null
+          notes?: string | null
+          operator_included?: boolean | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       equity_accounts: {
         Row: {
           account_type: string | null
@@ -731,6 +972,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      labor_rates: {
+        Row: {
+          created_at: string | null
+          daily_rate: number
+          effective_date: string
+          hourly_rate: number
+          id: string
+          labor_type: string
+          location: string | null
+          notes: string | null
+          overtime_rate: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          daily_rate: number
+          effective_date: string
+          hourly_rate: number
+          id?: string
+          labor_type: string
+          location?: string | null
+          notes?: string | null
+          overtime_rate?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          daily_rate?: number
+          effective_date?: string
+          hourly_rate?: number
+          id?: string
+          labor_type?: string
+          location?: string | null
+          notes?: string | null
+          overtime_rate?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       leads: {
         Row: {
@@ -1359,6 +1639,20 @@ export type Database = {
           task_id: string
           title: string
           urgency_score: number
+        }[]
+      }
+      calculate_dupa_costs: {
+        Args: {
+          p_dupa_item_id: string
+          p_location?: string
+          p_quantity: number
+        }
+        Returns: {
+          breakdown: Json
+          equipment_cost: number
+          labor_cost: number
+          material_cost: number
+          total_cost: number
         }[]
       }
       calculate_labor_cost:
