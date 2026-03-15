@@ -50,11 +50,17 @@ import {
   createDUPAItem,
   updateDUPAItem,
   deleteDUPAItem,
-  calculateDUPACost,
+  calculateDUPACosts,
 } from "@/services/dupaService";
 import { formatPeso } from "@/lib/boqCalculations";
 import { BOQ_CATEGORIES, DPWH_UNITS } from "@/constants";
 import type { DUPAItem, DUPAMaterialAnalysis, DUPALaborAnalysis, DUPAEquipmentAnalysis } from "@/types";
+
+type FullDUPAItem = DUPAItem & {
+  materials?: DUPAMaterialAnalysis[];
+  labor?: DUPALaborAnalysis[];
+  equipment?: DUPAEquipmentAnalysis[];
+};
 
 export default function DUPALibraryPage() {
   const router = useRouter();
@@ -64,7 +70,7 @@ export default function DUPALibraryPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [showDialog, setShowDialog] = useState(false);
-  const [editingItem, setEditingItem] = useState<DUPAItem | null>(null);
+  const [editingItem, setEditingItem] = useState<FullDUPAItem | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
   const [calculatedCost, setCalculatedCost] = useState<any>(null);
@@ -75,10 +81,10 @@ export default function DUPALibraryPage() {
     description: "",
     category: "",
     unit: "",
-    specifications: "",
-    materials: [] as DUPAMaterialAnalysis[],
-    labor: [] as DUPALaborAnalysis[],
-    equipment: [] as DUPAEquipmentAnalysis[],
+    notes: "",
+    materials: [] as Omit<DUPAMaterialAnalysis, "id" | "dupaItemId">[],
+    labor: [] as Omit<DUPALaborAnalysis, "id" | "dupaItemId">[],
+    equipment: [] as Omit<DUPAEquipmentAnalysis, "id" | "dupaItemId">[],
   });
 
   useEffect(() => {
@@ -94,8 +100,8 @@ export default function DUPALibraryPage() {
   async function loadDUPAItems() {
     try {
       setLoading(true);
-      const items = await getDUPAItems();
-      setDupaItems(items);
+      const res = await getDUPAItems();
+      setDupaItems(res.items);
     } catch (error) {
       console.error("Failed to load DUPA items:", error);
     } finally {
@@ -110,10 +116,10 @@ export default function DUPALibraryPage() {
         description: formData.description,
         category: formData.category as any,
         unit: formData.unit as any,
-        specifications: formData.specifications || null,
-        materials: formData.materials,
-        labor: formData.labor,
-        equipment: formData.equipment,
+        notes: formData.notes || null,
+        materials: formData.materials as any,
+        labor: formData.labor as any,
+        equipment: formData.equipment as any,
       };
 
       if (editingItem) {
@@ -133,20 +139,22 @@ export default function DUPALibraryPage() {
   async function handleEdit(item: DUPAItem) {
     try {
       const fullItem = await getDUPAItemById(item.id);
-      setEditingItem(fullItem);
+      if (!fullItem) return;
+      
+      setEditingItem(fullItem.item);
       setFormData({
-        itemCode: fullItem.itemCode,
-        description: fullItem.description,
-        category: fullItem.category,
-        unit: fullItem.unit,
-        specifications: fullItem.specifications || "",
+        itemCode: fullItem.item.itemCode,
+        description: fullItem.item.description,
+        category: fullItem.item.category,
+        unit: fullItem.item.unit,
+        notes: fullItem.item.notes || "",
         materials: fullItem.materials || [],
         labor: fullItem.labor || [],
         equipment: fullItem.equipment || [],
       });
       
       // Calculate cost preview
-      const cost = await calculateDUPACost(fullItem.id, 1);
+      const cost = await calculateDUPACosts(fullItem.item.id, 1);
       setCalculatedCost(cost);
       
       setShowDialog(true);
@@ -176,7 +184,7 @@ export default function DUPALibraryPage() {
       description: "",
       category: "",
       unit: "",
-      specifications: "",
+      notes: "",
       materials: [],
       labor: [],
       equipment: [],
@@ -192,7 +200,8 @@ export default function DUPALibraryPage() {
           materialName: "",
           unit: "pcs" as any,
           coefficient: 0,
-          unitCost: 0,
+          unitPrice: 0,
+          wastePercentage: 0,
           notes: "",
         },
       ],
@@ -207,7 +216,7 @@ export default function DUPALibraryPage() {
         {
           laborType: "",
           coefficient: 0,
-          dailyRate: 0,
+          hourlyRate: 0,
           notes: "",
         },
       ],
@@ -328,7 +337,6 @@ export default function DUPALibraryPage() {
                     <TableHead>Description</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead>Unit</TableHead>
-                    <TableHead className="text-right">Components</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -342,9 +350,9 @@ export default function DUPALibraryPage() {
                       </TableCell>
                       <TableCell className="max-w-md">
                         <div className="font-medium">{item.description}</div>
-                        {item.specifications && (
+                        {item.notes && (
                           <div className="text-xs text-muted-foreground mt-1">
-                            {item.specifications}
+                            {item.notes}
                           </div>
                         )}
                       </TableCell>
@@ -355,25 +363,6 @@ export default function DUPALibraryPage() {
                       </TableCell>
                       <TableCell>
                         <Badge variant="secondary">{item.unit}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex gap-2 justify-end">
-                          {(item.materials?.length || 0) > 0 && (
-                            <Badge variant="default" className="text-xs">
-                              M: {item.materials?.length}
-                            </Badge>
-                          )}
-                          {(item.labor?.length || 0) > 0 && (
-                            <Badge variant="default" className="text-xs">
-                              L: {item.labor?.length}
-                            </Badge>
-                          )}
-                          {(item.equipment?.length || 0) > 0 && (
-                            <Badge variant="default" className="text-xs">
-                              E: {item.equipment?.length}
-                            </Badge>
-                          )}
-                        </div>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex gap-2 justify-end">
@@ -487,12 +476,12 @@ export default function DUPALibraryPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="specifications">Specifications</Label>
+                  <Label htmlFor="notes">Notes / Specifications</Label>
                   <Input
-                    id="specifications"
-                    value={formData.specifications}
+                    id="notes"
+                    value={formData.notes}
                     onChange={(e) =>
-                      setFormData({ ...formData, specifications: e.target.value })
+                      setFormData({ ...formData, notes: e.target.value })
                     }
                     placeholder="e.g., Class A, 28-day strength"
                   />
@@ -564,11 +553,11 @@ export default function DUPALibraryPage() {
                       <Input
                         type="number"
                         step="0.01"
-                        placeholder="Unit cost"
-                        value={material.unitCost}
+                        placeholder="Unit Price"
+                        value={material.unitPrice}
                         onChange={(e) => {
                           const newMaterials = [...formData.materials];
-                          newMaterials[index].unitCost = parseFloat(e.target.value) || 0;
+                          newMaterials[index].unitPrice = parseFloat(e.target.value) || 0;
                           setFormData({ ...formData, materials: newMaterials });
                         }}
                       />
@@ -621,7 +610,7 @@ export default function DUPALibraryPage() {
                       <Input
                         type="number"
                         step="0.01"
-                        placeholder="Man-days"
+                        placeholder="Coefficient"
                         value={labor.coefficient}
                         onChange={(e) => {
                           const newLabor = [...formData.labor];
@@ -634,11 +623,11 @@ export default function DUPALibraryPage() {
                       <Input
                         type="number"
                         step="0.01"
-                        placeholder="Daily rate"
-                        value={labor.dailyRate}
+                        placeholder="Hourly rate"
+                        value={labor.hourlyRate}
                         onChange={(e) => {
                           const newLabor = [...formData.labor];
-                          newLabor[index].dailyRate = parseFloat(e.target.value) || 0;
+                          newLabor[index].hourlyRate = parseFloat(e.target.value) || 0;
                           setFormData({ ...formData, labor: newLabor });
                         }}
                       />
@@ -691,7 +680,7 @@ export default function DUPALibraryPage() {
                       <Input
                         type="number"
                         step="0.01"
-                        placeholder="Hours"
+                        placeholder="Coefficient"
                         value={equip.coefficient}
                         onChange={(e) => {
                           const newEquip = [...formData.equipment];

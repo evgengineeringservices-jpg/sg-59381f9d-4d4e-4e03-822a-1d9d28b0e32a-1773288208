@@ -79,18 +79,18 @@ export interface DUPACalculationResult {
 /**
  * Get all DUPA items with pagination and filtering
  */
-export async function getDUPAItems(params: {
+export async function getDUPAItems(params?: {
   page?: number;
   limit?: number;
   category?: string;
   searchTerm?: string;
   isActive?: boolean;
 }): Promise<{ items: DUPAItem[]; total: number }> {
-  const { page = 1, limit = 50, category, searchTerm, isActive = true } = params;
+  const { page = 1, limit = 50, category, searchTerm, isActive = true } = params || {};
   const offset = (page - 1) * limit;
 
   let query = supabase
-    .from("dupa_items")
+    .from("dupa_items" as any)
     .select("*", { count: "exact" })
     .eq("is_active", isActive)
     .order("item_code");
@@ -115,7 +115,7 @@ export async function getDUPAItems(params: {
   }
 
   return {
-    items: (data || []).map((item) => ({
+    items: ((data as any[]) || []).map((item) => ({
       id: item.id,
       itemCode: item.item_code,
       description: item.description,
@@ -144,7 +144,7 @@ export async function getDUPAItemById(
 } | null> {
   // Get DUPA item
   const { data: item, error: itemError } = await supabase
-    .from("dupa_items")
+    .from("dupa_items" as any)
     .select("*")
     .eq("id", dupaItemId)
     .single();
@@ -156,39 +156,44 @@ export async function getDUPAItemById(
 
   // Get material analysis
   const { data: materials, error: materialsError } = await supabase
-    .from("dupa_material_analysis")
+    .from("dupa_material_analysis" as any)
     .select("*")
     .eq("dupa_item_id", dupaItemId)
     .order("material_name");
 
   // Get labor analysis
   const { data: labor, error: laborError } = await supabase
-    .from("dupa_labor_analysis")
+    .from("dupa_labor_analysis" as any)
     .select("*")
     .eq("dupa_item_id", dupaItemId)
     .order("labor_type");
 
   // Get equipment analysis
   const { data: equipment, error: equipmentError } = await supabase
-    .from("dupa_equipment_analysis")
+    .from("dupa_equipment_analysis" as any)
     .select("*")
     .eq("dupa_item_id", dupaItemId)
     .order("equipment_name");
 
+  const dItem = item as any;
+  const mList = (materials as any[]) || [];
+  const lList = (labor as any[]) || [];
+  const eList = (equipment as any[]) || [];
+
   return {
     item: {
-      id: item.id,
-      itemCode: item.item_code,
-      description: item.description,
-      category: item.category,
-      unit: item.unit as DPWHUnit,
-      baseUnitCost: Number(item.base_unit_cost),
-      isActive: item.is_active,
-      notes: item.notes || undefined,
-      createdAt: item.created_at,
-      updatedAt: item.updated_at,
+      id: dItem.id,
+      itemCode: dItem.item_code,
+      description: dItem.description,
+      category: dItem.category,
+      unit: dItem.unit as DPWHUnit,
+      baseUnitCost: Number(dItem.base_unit_cost),
+      isActive: dItem.is_active,
+      notes: dItem.notes || undefined,
+      createdAt: dItem.created_at,
+      updatedAt: dItem.updated_at,
     },
-    materials: (materials || []).map((m) => ({
+    materials: mList.map((m) => ({
       id: m.id,
       dupaItemId: m.dupa_item_id,
       materialName: m.material_name,
@@ -198,7 +203,7 @@ export async function getDUPAItemById(
       wastePercentage: Number(m.waste_percentage),
       notes: m.notes || undefined,
     })),
-    labor: (labor || []).map((l) => ({
+    labor: lList.map((l) => ({
       id: l.id,
       dupaItemId: l.dupa_item_id,
       laborType: l.labor_type,
@@ -206,7 +211,7 @@ export async function getDUPAItemById(
       hourlyRate: Number(l.hourly_rate),
       notes: l.notes || undefined,
     })),
-    equipment: (equipment || []).map((e) => ({
+    equipment: eList.map((e) => ({
       id: e.id,
       dupaItemId: e.dupa_item_id,
       equipmentName: e.equipment_name,
@@ -224,7 +229,7 @@ export async function calculateDUPACosts(
   dupaItemId: string,
   quantity: number
 ): Promise<DUPACalculationResult | null> {
-  const { data, error } = await supabase.rpc("calculate_dupa_cost", {
+  const { data, error } = await supabase.rpc("calculate_dupa_cost" as any, {
     p_dupa_item_id: dupaItemId,
     p_quantity: quantity,
   });
@@ -234,7 +239,7 @@ export async function calculateDUPACosts(
     return null;
   }
 
-  const result = data[0];
+  const result = data[0] as any;
 
   // Get detailed breakdown
   const details = await getDUPAItemById(dupaItemId);
@@ -287,7 +292,7 @@ export async function createDUPAItem(item: {
   notes?: string;
 }): Promise<DUPAItem | null> {
   const { data, error } = await supabase
-    .from("dupa_items")
+    .from("dupa_items" as any)
     .insert({
       item_code: item.itemCode,
       description: item.description,
@@ -304,17 +309,18 @@ export async function createDUPAItem(item: {
     throw error;
   }
 
+  const res = data as any;
   return {
-    id: data.id,
-    itemCode: data.item_code,
-    description: data.description,
-    category: data.category,
-    unit: data.unit as DPWHUnit,
-    baseUnitCost: Number(data.base_unit_cost),
-    isActive: data.is_active,
-    notes: data.notes || undefined,
-    createdAt: data.created_at,
-    updatedAt: data.updated_at,
+    id: res.id,
+    itemCode: res.item_code,
+    description: res.description,
+    category: res.category,
+    unit: res.unit as DPWHUnit,
+    baseUnitCost: Number(res.base_unit_cost),
+    isActive: res.is_active,
+    notes: res.notes || undefined,
+    createdAt: res.created_at,
+    updatedAt: res.updated_at,
   };
 }
 
@@ -331,7 +337,7 @@ export async function addDUPAMaterial(material: {
   notes?: string;
 }): Promise<DUPAMaterialAnalysis | null> {
   const { data, error } = await supabase
-    .from("dupa_material_analysis")
+    .from("dupa_material_analysis" as any)
     .insert({
       dupa_item_id: material.dupaItemId,
       material_name: material.materialName,
@@ -349,15 +355,16 @@ export async function addDUPAMaterial(material: {
     throw error;
   }
 
+  const res = data as any;
   return {
-    id: data.id,
-    dupaItemId: data.dupa_item_id,
-    materialName: data.material_name,
-    coefficient: Number(data.coefficient),
-    unit: data.unit as DPWHUnit,
-    unitPrice: Number(data.unit_price),
-    wastePercentage: Number(data.waste_percentage),
-    notes: data.notes || undefined,
+    id: res.id,
+    dupaItemId: res.dupa_item_id,
+    materialName: res.material_name,
+    coefficient: Number(res.coefficient),
+    unit: res.unit as DPWHUnit,
+    unitPrice: Number(res.unit_price),
+    wastePercentage: Number(res.waste_percentage),
+    notes: res.notes || undefined,
   };
 }
 
@@ -372,7 +379,7 @@ export async function addDUPALabor(labor: {
   notes?: string;
 }): Promise<DUPALaborAnalysis | null> {
   const { data, error } = await supabase
-    .from("dupa_labor_analysis")
+    .from("dupa_labor_analysis" as any)
     .insert({
       dupa_item_id: labor.dupaItemId,
       labor_type: labor.laborType,
@@ -388,13 +395,14 @@ export async function addDUPALabor(labor: {
     throw error;
   }
 
+  const res = data as any;
   return {
-    id: data.id,
-    dupaItemId: data.dupa_item_id,
-    laborType: data.labor_type,
-    coefficient: Number(data.coefficient),
-    hourlyRate: Number(data.hourly_rate),
-    notes: data.notes || undefined,
+    id: res.id,
+    dupaItemId: res.dupa_item_id,
+    laborType: res.labor_type,
+    coefficient: Number(res.coefficient),
+    hourlyRate: Number(res.hourly_rate),
+    notes: res.notes || undefined,
   };
 }
 
@@ -409,7 +417,7 @@ export async function addDUPAEquipment(equipment: {
   notes?: string;
 }): Promise<DUPAEquipmentAnalysis | null> {
   const { data, error } = await supabase
-    .from("dupa_equipment_analysis")
+    .from("dupa_equipment_analysis" as any)
     .insert({
       dupa_item_id: equipment.dupaItemId,
       equipment_name: equipment.equipmentName,
@@ -425,13 +433,14 @@ export async function addDUPAEquipment(equipment: {
     throw error;
   }
 
+  const res = data as any;
   return {
-    id: data.id,
-    dupaItemId: data.dupa_item_id,
-    equipmentName: data.equipment_name,
-    coefficient: Number(data.coefficient),
-    hourlyRate: Number(data.hourly_rate),
-    notes: data.notes || undefined,
+    id: res.id,
+    dupaItemId: res.dupa_item_id,
+    equipmentName: res.equipment_name,
+    coefficient: Number(res.coefficient),
+    hourlyRate: Number(res.hourly_rate),
+    notes: res.notes || undefined,
   };
 }
 
@@ -461,7 +470,7 @@ export async function updateDUPAItem(
   if (updates.notes !== undefined) updateData.notes = updates.notes;
 
   const { data, error } = await supabase
-    .from("dupa_items")
+    .from("dupa_items" as any)
     .update(updateData)
     .eq("id", id)
     .select()
@@ -472,17 +481,18 @@ export async function updateDUPAItem(
     throw error;
   }
 
+  const res = data as any;
   return {
-    id: data.id,
-    itemCode: data.item_code,
-    description: data.description,
-    category: data.category,
-    unit: data.unit as DPWHUnit,
-    baseUnitCost: Number(data.base_unit_cost),
-    isActive: data.is_active,
-    notes: data.notes || undefined,
-    createdAt: data.created_at,
-    updatedAt: data.updated_at,
+    id: res.id,
+    itemCode: res.item_code,
+    description: res.description,
+    category: res.category,
+    unit: res.unit as DPWHUnit,
+    baseUnitCost: Number(res.base_unit_cost),
+    isActive: res.is_active,
+    notes: res.notes || undefined,
+    createdAt: res.created_at,
+    updatedAt: res.updated_at,
   };
 }
 
@@ -491,7 +501,7 @@ export async function updateDUPAItem(
  */
 export async function deleteDUPAItem(id: string): Promise<boolean> {
   const { error } = await supabase
-    .from("dupa_items")
+    .from("dupa_items" as any)
     .update({ is_active: false })
     .eq("id", id);
 
@@ -508,7 +518,7 @@ export async function deleteDUPAItem(id: string): Promise<boolean> {
  */
 export async function getDUPACategories(): Promise<string[]> {
   const { data, error } = await supabase
-    .from("dupa_items")
+    .from("dupa_items" as any)
     .select("category")
     .eq("is_active", true);
 
@@ -517,7 +527,7 @@ export async function getDUPACategories(): Promise<string[]> {
     return [];
   }
 
-  const categories = [...new Set(data?.map((item) => item.category) || [])];
+  const categories = [...new Set((data as any[])?.map((item) => item.category) || [])];
   return categories.sort();
 }
 

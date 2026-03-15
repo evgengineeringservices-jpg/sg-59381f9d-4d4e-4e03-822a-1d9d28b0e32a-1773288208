@@ -32,7 +32,7 @@ export async function calculateDUPACost(
     equipment: Array<{ name: string; hours: number; cost: number }>;
   };
 } | null> {
-  const { data, error } = await supabase.rpc("calculate_dupa_cost", {
+  const { data, error } = await supabase.rpc("calculate_dupa_cost" as any, {
     p_dupa_item_id: dupaItemId,
     p_quantity: quantity,
   });
@@ -42,7 +42,7 @@ export async function calculateDUPACost(
     return null;
   }
 
-  const result = data[0];
+  const result = data[0] as any;
   return {
     materialCost: Number(result.total_material_cost),
     laborCost: Number(result.total_labor_cost),
@@ -89,7 +89,7 @@ export async function getDUPAItemDetails(dupaItemId: string): Promise<{
 } | null> {
   // Get DUPA item
   const { data: dupaItem, error: dupaError } = await supabase
-    .from("dupa_items")
+    .from("dupa_items" as any)
     .select("*")
     .eq("id", dupaItemId)
     .single();
@@ -101,29 +101,34 @@ export async function getDUPAItemDetails(dupaItemId: string): Promise<{
 
   // Get material analysis
   const { data: materials, error: materialsError } = await supabase
-    .from("dupa_material_analysis")
+    .from("dupa_material_analysis" as any)
     .select("*")
     .eq("dupa_item_id", dupaItemId);
 
   // Get labor analysis
   const { data: labor, error: laborError } = await supabase
-    .from("dupa_labor_analysis")
+    .from("dupa_labor_analysis" as any)
     .select("*")
     .eq("dupa_item_id", dupaItemId);
 
   // Get equipment analysis
   const { data: equipment, error: equipmentError } = await supabase
-    .from("dupa_equipment_analysis")
+    .from("dupa_equipment_analysis" as any)
     .select("*")
     .eq("dupa_item_id", dupaItemId);
 
+  const dItem = dupaItem as any;
+  const mList = (materials as any[]) || [];
+  const lList = (labor as any[]) || [];
+  const eList = (equipment as any[]) || [];
+
   return {
-    id: dupaItem.id,
-    itemCode: dupaItem.item_code,
-    description: dupaItem.description,
-    unit: dupaItem.unit,
-    baseUnitCost: Number(dupaItem.base_unit_cost),
-    materials: (materials || []).map((m) => ({
+    id: dItem.id,
+    itemCode: dItem.item_code,
+    description: dItem.description,
+    unit: dItem.unit,
+    baseUnitCost: Number(dItem.base_unit_cost),
+    materials: mList.map((m) => ({
       id: m.id,
       materialName: m.material_name,
       coefficient: Number(m.coefficient),
@@ -131,13 +136,13 @@ export async function getDUPAItemDetails(dupaItemId: string): Promise<{
       unitPrice: Number(m.unit_price),
       wastePercentage: Number(m.waste_percentage),
     })),
-    labor: (labor || []).map((l) => ({
+    labor: lList.map((l) => ({
       id: l.id,
       laborType: l.labor_type,
       coefficient: Number(l.coefficient),
       hourlyRate: Number(l.hourly_rate),
     })),
-    equipment: (equipment || []).map((e) => ({
+    equipment: eList.map((e) => ({
       id: e.id,
       equipmentName: e.equipment_name,
       coefficient: Number(e.coefficient),
@@ -161,7 +166,7 @@ export async function searchDUPAItems(
   baseUnitCost: number;
 }>> {
   let query = supabase
-    .from("dupa_items")
+    .from("dupa_items" as any)
     .select("*")
     .ilike("description", `%${searchTerm}%`)
     .eq("is_active", true)
@@ -178,7 +183,7 @@ export async function searchDUPAItems(
     return [];
   }
 
-  return (data || []).map((item) => ({
+  return ((data as any[]) || []).map((item) => ({
     id: item.id,
     itemCode: item.item_code,
     description: item.description,
