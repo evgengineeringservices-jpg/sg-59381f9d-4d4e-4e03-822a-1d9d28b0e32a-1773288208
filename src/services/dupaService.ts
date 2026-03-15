@@ -769,6 +769,60 @@ export async function deleteDUPAItem(id: string): Promise<boolean> {
 }
 
 /**
+ * Sync DUPA item material prices with the latest Market Prices
+ */
+export async function syncDUPAWithMarketPrices(dupaItemId: string): Promise<{ success: boolean; updatedCount: number }> {
+  // 1. Get DUPA materials
+  const { data: materials, error: matError } = await supabase
+    .from("dupa_material_analysis" as any)
+    .select("*")
+    .eq("dupa_item_id", dupaItemId);
+    
+  if (matError || !materials || materials.length === 0) return { success: true, updatedCount: 0 };
+
+  // 2. Get all market prices
+  const { data: marketPrices, error: mpError } = await supabase
+    .from("market_prices" as any)
+    .select("*")
+    .order("effective_date", { ascending: false });
+    
+  if (mpError || !marketPrices || marketPrices.length === 0) return { success: true, updatedCount: 0 };
+
+  let updatedCount = 0;
+
+  // 3. For each material, find latest market price
+  for (const mat of materials) {
+    // Try to find an exact or partial match in market prices
+    const match = marketPrices.find(mp => 
+      mp.item_name.toLowerCase() === mat.material_name.toLowerCase() ||
+      mat.material_name.toLowerCase().includes(mp.item_name.toLowerCase()) ||
+      mp.item_name.toLowerCase().includes(mat.material_name.toLowerCase())
+    );
+    
+    if (match && Number(match.price_per_unit) !== Number(mat.unit_price)) {
+      await supabase
+        .from("dupa_material_analysis" as any)
+        .update({ unit_price: match.price_per_unit })
+        .eq("id", mat.id);
+      updatedCount++;
+    }
+  }
+  
+  // 4. Recalculate base cost if anything was updated
+  if (updatedCount > 0) {
+    const costCalc = await calculateDUPACosts(dupaItemId, 1);
+    if (costCalc) {
+      await supabase
+        .from("dupa_items" as any)
+        .update({ base_unit_cost: costCalc.unitCost })
+        .eq("id", dupaItemId);
+    }
+  }
+  
+  return { success: true, updatedCount };
+}
+
+/**
  * Get DUPA categories
  */
 export async function getDUPACategories(): Promise<string[]> {
@@ -854,7 +908,8 @@ export async function importDUPAFromExcel(fileBuffer: ArrayBuffer): Promise<{ su
     const groupedItems: Record<string, any> = {};
     
     for (const row of jsonData as any[]) {
-      const itemCode = row["Item Code"] || row["Item_Code"] || row["ItemCode"];
+      // Handle standard DPWH formats and custom formats
+      const itemCode = row["Item Code"] || row["Item_Code"] || row["ItemCode"] || row["Item No."] || row["Pay Item No."];
       if (!itemCode) continue;
       
       if (!groupedItems[itemCode]) {
@@ -869,29 +924,33 @@ export async function importDUPAFromExcel(fileBuffer: ArrayBuffer): Promise<{ su
         };
       }
       
-      if (row["Material Name"]) {
+      // DPWH format often uses "Designation" for the name of labor/equipment/materials
+      const designation = row["Designation"] || row["Name"];
+      const type = row["Type"] || row["Component"]; // e.g. "Material", "Labor", "Equipment"
+      
+      if (row["Material Name"] || (designation && type?.toLowerCase().includes("material"))) {
         groupedItems[itemCode].materials.push({
-          materialName: String(row["Material Name"]),
-          coefficient: Number(row["Material Quantity"] || row["Material Coeff"] || 0),
-          unit: String(row["Material Unit"] || "pcs").toLowerCase() as DPWHUnit,
-          unitPrice: Number(row["Material Rate"] || row["Material Price"] || 0),
+          materialName: String(row["Material Name"] || designation),
+          coefficient: Number(row["Material Quantity"] || row["Material Coeff"] || row["Quantity"] || 0),
+          unit: String(row["Material Unit"] || row["Unit"] || "pcs").toLowerCase() as DPWHUnit,
+          unitPrice: Number(row["Material Rate"] || row["Material Price"] || row["Unit Cost"] || 0),
           wastePercentage: Number(row["Waste %"] || 0)
         });
       }
       
-      if (row["Labor Type"]) {
+      if (row["Labor Type"] || (designation && type?.toLowerCase().includes("labor"))) {
         groupedItems[itemCode].labor.push({
-          laborType: String(row["Labor Type"]),
-          coefficient: Number(row["Labor Hours"] || row["Labor Coeff"] || 0),
-          hourlyRate: Number(row["Labor Rate"] || 0)
+          laborType: String(row["Labor Type"] || designation),
+          coefficient: Number(row["Labor Hours"] || row["Labor Coeff"] || row["Quantity"] || 0),
+          hourlyRate: Number(row["Labor Rate"] || row["Unit Cost"] || 0)
         });
       }
       
-      if (row["Equipment Name"]) {
+      if (row["Equipment Name"] || (designation && type?.toLowerCase().includes("equipment"))) {
         groupedItems[itemCode].equipment.push({
-          equipmentName: String(row["Equipment Name"]),
-          coefficient: Number(row["Equipment Hours"] || row["Equipment Coeff"] || 0),
-          hourlyRate: Number(row["Equipment Rate"] || 0)
+          equipmentName: String(row["Equipment Name"] || designation),
+          coefficient: Number(row["Equipment Hours"] || row["Equipment Coeff"] || row["Quantity"] || 0),
+          hourlyRate: Number(row["Equipment Rate"] || row["Unit Cost"] || 0)
         });
       }
     }

@@ -42,6 +42,7 @@ import {
   Calculator,
   AlertCircle,
   CheckCircle,
+  RefreshCw,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -51,10 +52,12 @@ import {
   updateDUPAItem,
   deleteDUPAItem,
   calculateDUPACosts,
+  syncDUPAWithMarketPrices,
 } from "@/services/dupaService";
 import { formatPeso } from "@/lib/boqCalculations";
 import { BOQ_CATEGORIES, DPWH_UNITS } from "@/constants";
 import type { DUPAItem, DUPAMaterialAnalysis, DUPALaborAnalysis, DUPAEquipmentAnalysis } from "@/types";
+import { useToast } from "@/components/ui/use-toast";
 
 type FullDUPAItem = DUPAItem & {
   materials?: DUPAMaterialAnalysis[];
@@ -74,6 +77,8 @@ export default function DUPALibraryPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
   const [calculatedCost, setCalculatedCost] = useState<any>(null);
+  const [syncingPrices, setSyncingPrices] = useState(false);
+  const { toast } = useToast();
 
   // Form state
   const [formData, setFormData] = useState({
@@ -130,9 +135,40 @@ export default function DUPALibraryPage() {
 
       await loadDUPAItems();
       handleCloseDialog();
+      toast({ title: editingItem ? "DUPA Item updated" : "DUPA Item created successfully" });
     } catch (error) {
       console.error("Failed to save DUPA item:", error);
-      alert("Failed to save DUPA item. Please try again.");
+      toast({ title: "Failed to save DUPA item", variant: "destructive" });
+    }
+  }
+
+  async function handleSyncWithMarketPrices(id: string) {
+    try {
+      setSyncingPrices(true);
+      const result = await syncDUPAWithMarketPrices(id);
+      if (result.updatedCount > 0) {
+        toast({ 
+          title: "Market Prices Synced", 
+          description: `Updated ${result.updatedCount} material prices from the market database.` 
+        });
+        
+        // Refresh the current dialog if it's open
+        if (editingItem && editingItem.id === id) {
+          handleEdit({ id } as DUPAItem);
+        } else {
+          await loadDUPAItems();
+        }
+      } else {
+        toast({ 
+          title: "Prices up to date", 
+          description: "No material prices needed updating from the market database." 
+        });
+      }
+    } catch (error) {
+      console.error("Failed to sync prices:", error);
+      toast({ title: "Failed to sync market prices", variant: "destructive" });
+    } finally {
+      setSyncingPrices(false);
     }
   }
 
@@ -366,6 +402,15 @@ export default function DUPALibraryPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex gap-2 justify-end">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            title="Sync with Market Prices"
+                            onClick={() => handleSyncWithMarketPrices(item.id)}
+                            disabled={syncingPrices}
+                          >
+                            <RefreshCw className={`h-4 w-4 text-blue-500 ${syncingPrices ? 'animate-spin' : ''}`} />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -752,6 +797,17 @@ export default function DUPALibraryPage() {
               <Button variant="outline" onClick={handleCloseDialog}>
                 Cancel
               </Button>
+              {editingItem && (
+                <Button 
+                  variant="outline" 
+                  className="bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-200"
+                  onClick={() => handleSyncWithMarketPrices(editingItem.id)}
+                  disabled={syncingPrices}
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${syncingPrices ? 'animate-spin' : ''}`} />
+                  Sync Market Prices
+                </Button>
+              )}
               <Button onClick={handleSave}>
                 {editingItem ? "Update" : "Create"} DUPA Item
               </Button>
