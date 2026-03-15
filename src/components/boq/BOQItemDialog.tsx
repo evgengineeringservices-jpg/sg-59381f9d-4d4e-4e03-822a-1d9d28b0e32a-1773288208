@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { TrendingUp, Calculator, AlertCircle } from "lucide-react";
+import { TrendingUp, Calculator, AlertCircle, BookOpen } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -24,6 +24,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { BOQ_CATEGORIES, DPWH_UNITS } from "@/constants";
 import { autoCalculateBOQItem, formatPeso } from "@/lib/boqCalculations";
 import { PriceSuggestionModal } from "./PriceSuggestionModal";
+import { DUPASelector } from "./DUPASelector";
 import type { BOQItem } from "@/types";
 import Link from "next/link";
 
@@ -45,6 +46,7 @@ export function BOQItemDialog({
   const [formData, setFormData] = useState({
     itemNo: "",
     dpwhItemCode: "",
+    dupaItemId: "",
     description: "",
     category: "",
     unit: "",
@@ -52,17 +54,20 @@ export function BOQItemDialog({
     unitCost: "",
     laborCost: "",
     materialCost: "",
+    equipmentCost: "",
   });
   const [autoMode, setAutoMode] = useState(true);
   const [calculatedCosts, setCalculatedCosts] = useState<any>(null);
   const [calculating, setCalculating] = useState(false);
   const [showPriceSuggestion, setShowPriceSuggestion] = useState(false);
+  const [showDUPASelector, setShowDUPASelector] = useState(false);
 
   useEffect(() => {
     if (item) {
       setFormData({
         itemNo: item.itemNo,
         dpwhItemCode: item.dpwhItemCode || "",
+        dupaItemId: item.dupaItemId || "",
         description: item.description,
         category: item.category,
         unit: item.unit,
@@ -70,12 +75,14 @@ export function BOQItemDialog({
         unitCost: item.unitCost?.toString() || "",
         laborCost: item.laborCost?.toString() || "",
         materialCost: item.materialCost?.toString() || "",
+        equipmentCost: item.equipmentCost?.toString() || "0",
       });
       setAutoMode(false);
     } else {
       setFormData({
         itemNo: "",
         dpwhItemCode: "",
+        dupaItemId: "",
         description: "",
         category: "",
         unit: "",
@@ -83,6 +90,7 @@ export function BOQItemDialog({
         unitCost: "",
         laborCost: "",
         materialCost: "",
+        equipmentCost: "0",
       });
       setAutoMode(true);
       setCalculatedCosts(null);
@@ -105,6 +113,7 @@ export function BOQItemDialog({
     formData.category,
     formData.unit,
     formData.quantity,
+    formData.dupaItemId,
     autoMode,
   ]);
 
@@ -116,6 +125,7 @@ export function BOQItemDialog({
         category: formData.category,
         unit: formData.unit,
         quantity: parseFloat(formData.quantity),
+        dupaItemId: formData.dupaItemId || undefined,
       });
       setCalculatedCosts(costs);
     } catch (error) {
@@ -124,6 +134,39 @@ export function BOQItemDialog({
     } finally {
       setCalculating(false);
     }
+  }
+
+  function handleDUPASelect(dupaItem: {
+    id: string;
+    itemCode: string;
+    description: string;
+    unit: string;
+    materialCost: number;
+    laborCost: number;
+    equipmentCost: number;
+    unitCost: number;
+    totalCost: number;
+  }) {
+    setFormData({
+      ...formData,
+      dupaItemId: dupaItem.id,
+      dpwhItemCode: dupaItem.itemCode,
+      description: dupaItem.description,
+      unit: dupaItem.unit,
+      materialCost: dupaItem.materialCost.toString(),
+      laborCost: dupaItem.laborCost.toString(),
+      equipmentCost: dupaItem.equipmentCost.toString(),
+      unitCost: dupaItem.unitCost.toString(),
+    });
+    setCalculatedCosts({
+      materialCost: dupaItem.materialCost,
+      laborCost: dupaItem.laborCost,
+      equipmentCost: dupaItem.equipmentCost,
+      unitCost: dupaItem.unitCost,
+      totalCost: dupaItem.totalCost,
+      source: "dupa",
+    });
+    setAutoMode(true);
   }
 
   function handlePriceSelect(price: number, source: string) {
@@ -144,21 +187,27 @@ export function BOQItemDialog({
     const laborCost = autoMode && calculatedCosts
       ? calculatedCosts.laborCost
       : parseFloat(formData.laborCost) || 0;
-    const unitCost = (materialCost + laborCost) / quantity;
-    const total = materialCost + laborCost;
+    const equipmentCost = autoMode && calculatedCosts
+      ? calculatedCosts.equipmentCost
+      : parseFloat(formData.equipmentCost) || 0;
+    const unitCost = (materialCost + laborCost + equipmentCost) / quantity;
+    const total = materialCost + laborCost + equipmentCost;
 
     await onSave({
       projectId,
       itemNo: formData.itemNo,
       dpwhItemCode: formData.dpwhItemCode || null,
+      dupaItemId: formData.dupaItemId || null,
       description: formData.description,
       category: formData.category as any,
       unit: formData.unit as any,
       quantity,
       materialCost,
       laborCost,
+      equipmentCost,
       unitCost,
       total,
+      costSource: calculatedCosts?.source || "manual",
     });
 
     onOpenChange(false);
@@ -181,25 +230,51 @@ export function BOQItemDialog({
             </DialogTitle>
             <DialogDescription>
               {autoMode
-                ? "Auto-calculation enabled - costs will be computed from market prices"
+                ? calculatedCosts?.source === "dupa"
+                  ? "DUPA-based calculation - costs from standard unit analysis"
+                  : "Auto-calculation enabled - costs will be computed from market prices"
                 : "Manual mode - enter costs directly"}
             </DialogDescription>
           </DialogHeader>
 
-          {/* Auto Mode Toggle */}
-          <div className="flex items-center justify-between p-3 bg-accent/50 rounded-lg">
-            <div className="flex items-center gap-2">
-              <Calculator className="h-4 w-4" />
-              <span className="text-sm font-medium">Auto-calculate costs</span>
-            </div>
+          {/* DUPA Selector Button */}
+          <div className="flex gap-2">
             <Button
-              variant={autoMode ? "default" : "outline"}
-              size="sm"
-              onClick={() => setAutoMode(!autoMode)}
+              type="button"
+              variant="outline"
+              className="flex-1"
+              onClick={() => setShowDUPASelector(true)}
             >
-              {autoMode ? "Auto" : "Manual"}
+              <BookOpen className="h-4 w-4 mr-2" />
+              Select from DUPA Library
             </Button>
+
+            {/* Auto Mode Toggle */}
+            <div className="flex items-center gap-2 px-4 py-2 bg-accent/50 rounded-lg">
+              <Calculator className="h-4 w-4" />
+              <Button
+                variant={autoMode ? "default" : "outline"}
+                size="sm"
+                onClick={() => setAutoMode(!autoMode)}
+              >
+                {autoMode ? "Auto" : "Manual"}
+              </Button>
+            </div>
           </div>
+
+          {/* DUPA Badge */}
+          {formData.dupaItemId && calculatedCosts?.source === "dupa" && (
+            <Alert className="border-primary bg-primary/5">
+              <BookOpen className="h-4 w-4" />
+              <AlertDescription>
+                Using DUPA standard item: <strong>{formData.dpwhItemCode}</strong>
+                <br />
+                <span className="text-xs text-muted-foreground">
+                  Material + Labor + Equipment analysis applied
+                </span>
+              </AlertDescription>
+            </Alert>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             {/* Item Number */}
@@ -217,7 +292,7 @@ export function BOQItemDialog({
 
             {/* DPWH Code */}
             <div className="space-y-2">
-              <Label htmlFor="dpwhItemCode">DPWH Item Code</Label>
+              <Label htmlFor="dpwhItemCode">DPWH/DUPA Code</Label>
               <Input
                 id="dpwhItemCode"
                 value={formData.dpwhItemCode}
@@ -225,6 +300,7 @@ export function BOQItemDialog({
                   setFormData({ ...formData, dpwhItemCode: e.target.value })
                 }
                 placeholder="e.g., 300-01"
+                disabled={!!formData.dupaItemId}
               />
             </div>
 
@@ -239,6 +315,7 @@ export function BOQItemDialog({
                 }
                 placeholder="e.g., Solid Wood Door Panel - Narra 2100x900x50mm"
                 rows={2}
+                disabled={!!formData.dupaItemId}
               />
             </div>
 
@@ -250,6 +327,7 @@ export function BOQItemDialog({
                 onValueChange={(value) =>
                   setFormData({ ...formData, category: value })
                 }
+                disabled={!!formData.dupaItemId}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select category" />
@@ -272,6 +350,7 @@ export function BOQItemDialog({
                 onValueChange={(value) =>
                   setFormData({ ...formData, unit: value })
                 }
+                disabled={!!formData.dupaItemId}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select unit" />
@@ -302,7 +381,7 @@ export function BOQItemDialog({
             </div>
 
             {/* Price Suggestion Button */}
-            {!autoMode && (
+            {!autoMode && !formData.dupaItemId && (
               <div className="space-y-2">
                 <Label>Market Price Lookup</Label>
                 <Button
@@ -323,13 +402,15 @@ export function BOQItemDialog({
               <div className="col-span-2 p-4 bg-primary/5 border border-primary/20 rounded-lg space-y-2">
                 <div className="flex items-center gap-2 mb-2">
                   <Badge variant="default" className="text-xs">
-                    Auto-Calculated
+                    {calculatedCosts.source === "dupa" ? "DUPA Formula" : "Auto-Calculated"}
                   </Badge>
                   <span className="text-xs text-muted-foreground">
-                    Based on highest current market price
+                    {calculatedCosts.source === "dupa"
+                      ? "Based on DUPA standard unit analysis"
+                      : "Based on highest current market price"}
                   </span>
                 </div>
-                <div className="grid grid-cols-3 gap-4 text-sm">
+                <div className="grid grid-cols-4 gap-4 text-sm">
                   <div>
                     <p className="text-muted-foreground">Material Cost</p>
                     <p className="font-semibold text-lg">
@@ -337,9 +418,15 @@ export function BOQItemDialog({
                     </p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Labor Cost (35%)</p>
+                    <p className="text-muted-foreground">Labor Cost</p>
                     <p className="font-semibold text-lg">
                       {formatPeso(calculatedCosts.laborCost)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Equipment Cost</p>
+                    <p className="font-semibold text-lg">
+                      {formatPeso(calculatedCosts.equipmentCost || 0)}
                     </p>
                   </div>
                   <div>
@@ -382,16 +469,30 @@ export function BOQItemDialog({
                     placeholder="0.00"
                   />
                 </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="equipmentCost">Equipment Cost (PHP)</Label>
+                  <Input
+                    id="equipmentCost"
+                    type="number"
+                    step="0.01"
+                    value={formData.equipmentCost}
+                    onChange={(e) =>
+                      setFormData({ ...formData, equipmentCost: e.target.value })
+                    }
+                    placeholder="0.00"
+                  />
+                </div>
               </>
             )}
 
             {/* No Market Data Warning */}
-            {autoMode && !calculating && !calculatedCosts && canCalculate && (
+            {autoMode && !calculating && !calculatedCosts && canCalculate && !formData.dupaItemId && (
               <div className="col-span-2">
                 <Alert>
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
-                    No matching market prices found. Switch to manual mode or{" "}
+                    No matching market prices or DUPA items found. Try selecting from DUPA library or{" "}
                     <Link href="/crm/admin/market-prices" className="underline font-medium">
                       add market prices
                     </Link>.
@@ -411,6 +512,14 @@ export function BOQItemDialog({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* DUPA Selector */}
+      <DUPASelector
+        open={showDUPASelector}
+        onClose={() => setShowDUPASelector(false)}
+        onSelect={handleDUPASelect}
+        quantity={parseFloat(formData.quantity) || 1}
+      />
 
       {/* Price Suggestion Modal */}
       <PriceSuggestionModal
