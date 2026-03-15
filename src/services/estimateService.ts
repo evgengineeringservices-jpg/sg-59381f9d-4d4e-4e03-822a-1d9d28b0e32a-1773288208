@@ -20,6 +20,9 @@ export async function createEstimateProject(title: string, location: string): Pr
       name: title,
       location: location,
       status: 'Draft',
+      client: 'TBD',
+      start_date: new Date().toISOString().split('T')[0],
+      end_date: new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0],
       ocm_percent: 15, // default assumptions
       profit_percent: 10,
       vat_percent: 5

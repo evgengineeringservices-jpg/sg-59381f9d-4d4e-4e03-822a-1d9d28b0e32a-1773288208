@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -17,7 +18,6 @@ import {
 } from "@/services/estimateService";
 import { calculateBOETotals, formatCurrency, type ProjectSettings } from "@/lib/estimateCalculations";
 import { Printer, Save, FileSpreadsheet, ArrowLeft, Loader2, MapPin, Calculator } from "lucide-react";
-import debounce from "lodash/debounce";
 
 export default function EstimateWorkbook() {
   const router = useRouter();
@@ -73,6 +73,8 @@ export default function EstimateWorkbook() {
   }, [items, settings]);
 
   // Handle immediate local state update + debounced DB save to give Excel-like feel
+  const saveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
   const handleQuantityChange = (itemId: string, val: string) => {
     const qty = parseFloat(val) || 0;
     
@@ -99,25 +101,19 @@ export default function EstimateWorkbook() {
       return item;
     }));
 
-    debouncedSave(itemId, qty);
-  };
-
-  const debouncedSave = useCallback(
-    debounce(async (itemId: string, qty: number) => {
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(async () => {
       setIsSaving(true);
       try {
-        const itemToSave = items.find(i => i.id === itemId);
-        if (itemToSave) {
-          await updateEstimateItemQuantity(itemId, qty, settings, itemToSave);
-        }
+        const itemToSave = items.find(i => i.id === itemId) || {} as any;
+        await updateEstimateItemQuantity(itemId, qty, settings, itemToSave);
       } catch (error) {
         toast({ title: "Sync Error", description: "Failed to save quantity", variant: "destructive" });
       } finally {
         setIsSaving(false);
       }
-    }, 800),
-    [items, settings]
-  );
+    }, 800);
+  };
 
   const handleSettingsChange = async (key: keyof ProjectSettings, value: number) => {
     const newSettings = { ...settings, [key]: value };
@@ -276,7 +272,7 @@ export default function EstimateWorkbook() {
                             {category.toUpperCase()}
                           </TableCell>
                         </TableRow>
-                        {catItems.map((item) => (
+                        {(catItems as any[]).map((item) => (
                           <TableRow key={item.id} className="hover:bg-muted/50 group">
                             <TableCell className="font-medium border-r">{item.item_code}</TableCell>
                             <TableCell className="border-r">{item.description}</TableCell>
