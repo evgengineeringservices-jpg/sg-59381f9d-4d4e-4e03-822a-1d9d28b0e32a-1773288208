@@ -58,7 +58,7 @@ import {
 import { formatPeso } from "@/lib/boqCalculations";
 import { BOQ_CATEGORIES, DPWH_UNITS } from "@/constants";
 import type { DUPAItem, DUPAMaterialAnalysis, DUPALaborAnalysis, DUPAEquipmentAnalysis } from "@/types";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 
 type FullDUPAItem = DUPAItem & {
   materials?: DUPAMaterialAnalysis[];

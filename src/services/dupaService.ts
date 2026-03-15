@@ -900,65 +900,172 @@ export async function bulkImportDUPAItems(items: Array<{
 export async function importDUPAFromExcel(fileBuffer: ArrayBuffer): Promise<{ success: number; failed: number; errors: string[] }> {
   try {
     const workbook = XLSX.read(fileBuffer, { type: "array" });
-    const firstSheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[firstSheetName];
-    
-    const jsonData = XLSX.utils.sheet_to_json(worksheet);
-    
     const groupedItems: Record<string, any> = {};
-    
-    for (const row of jsonData as any[]) {
-      // Handle standard DPWH formats and custom formats
-      const itemCode = row["Item Code"] || row["Item_Code"] || row["ItemCode"] || row["Item No."] || row["Pay Item No."];
-      if (!itemCode) continue;
+    let parsedCount = 0;
+
+    // Iterate through all sheets as each standard DUPA item might have its own sheet
+    for (const sheetName of workbook.SheetNames) {
+      // Skip summary sheets like "INPUT DATA", "BOE", "ABC", etc.
+      if (sheetName.toLowerCase().includes("input") || 
+          sheetName.toLowerCase() === "boe" || 
+          sheetName.toLowerCase() === "abc" || 
+          sheetName.toLowerCase() === "table of contents") {
+        continue;
+      }
+
+      const worksheet = workbook.Sheets[sheetName];
+      // Read as 2D array to easily search for specific sections (A. Labor, B. Equipment, E. Materials)
+      const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+      
+      // Attempt to extract item code from sheet name (e.g., "800(1) Clearing & Grab" -> "800(1)")
+      const itemCodeMatch = sheetName.match(/^([\w.()-]+)/);
+      const itemCode = itemCodeMatch ? itemCodeMatch[1] : sheetName;
+      const description = sheetName.replace(itemCode, "").trim() || "Imported DUPA Item";
+
+      let currentSection = "";
       
       if (!groupedItems[itemCode]) {
         groupedItems[itemCode] = {
-          itemCode: String(itemCode),
-          description: row["Description"] || "Standard Item",
-          category: row["Category"] || "General",
-          unit: String(row["Unit"] || "sq_m").toLowerCase() as DPWHUnit,
+          itemCode,
+          description,
+          category: "General",
+          unit: "sq_m", // Default fallback, we will try to find the real one
           materials: [],
           labor: [],
           equipment: []
         };
       }
-      
-      // DPWH format often uses "Designation" for the name of labor/equipment/materials
-      const designation = row["Designation"] || row["Name"];
-      const type = row["Type"] || row["Component"]; // e.g. "Material", "Labor", "Equipment"
-      
-      if (row["Material Name"] || (designation && type?.toLowerCase().includes("material"))) {
-        groupedItems[itemCode].materials.push({
-          materialName: String(row["Material Name"] || designation),
-          coefficient: Number(row["Material Quantity"] || row["Material Coeff"] || row["Quantity"] || 0),
-          unit: String(row["Material Unit"] || row["Unit"] || "pcs").toLowerCase() as DPWHUnit,
-          unitPrice: Number(row["Material Rate"] || row["Material Price"] || row["Unit Cost"] || 0),
-          wastePercentage: Number(row["Waste %"] || 0)
-        });
-      }
-      
-      if (row["Labor Type"] || (designation && type?.toLowerCase().includes("labor"))) {
-        groupedItems[itemCode].labor.push({
-          laborType: String(row["Labor Type"] || designation),
-          coefficient: Number(row["Labor Hours"] || row["Labor Coeff"] || row["Quantity"] || 0),
-          hourlyRate: Number(row["Labor Rate"] || row["Unit Cost"] || 0)
-        });
-      }
-      
-      if (row["Equipment Name"] || (designation && type?.toLowerCase().includes("equipment"))) {
-        groupedItems[itemCode].equipment.push({
-          equipmentName: String(row["Equipment Name"] || designation),
-          coefficient: Number(row["Equipment Hours"] || row["Equipment Coeff"] || row["Quantity"] || 0),
-          hourlyRate: Number(row["Equipment Rate"] || row["Unit Cost"] || 0)
-        });
+
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i] || [];
+        const firstCell = String(row[0] || "").trim();
+        const secondCell = String(row[1] || "").trim();
+        
+        // Detect sections based on DPWH standard format
+        if (secondCell.includes("A.") && (row[2] || "").toString().includes("Labor")) currentSection = "Labor";
+        else if (secondCell.includes("B.") && (row[2] || "").toString().includes("Equipment")) currentSection = "Equipment";
+        else if (secondCell.includes("E.") && (row[2] || "").toString().includes("Materials")) currentSection = "Materials";
+        
+        // Parse data based on current section
+        if (currentSection === "Labor" && row.length >= 6) {
+          const designation = String(row[1] || row[2] || "").trim();
+          const quantity = Number(row[10] || row[5] || row[4] || 0);
+          const unit = String(row[13] || row[6] || row[5] || "hr").trim();
+          const rate = Number(row[16] || row[7] || row[6] || 0);
+          
+          if (designation && designation !== "Name and Specifications" && designation !== "Labor" && quantity > 0) {
+            groupedItems[itemCode].labor.push({
+              laborType: designation,
+              coefficient: quantity,
+              hourlyRate: rate
+            });
+            parsedCount++;
+          }
+        }
+        else if (currentSection === "Equipment" && row.length >= 6) {
+          const designation = String(row[1] || row[2] || "").trim();
+          const quantity = Number(row[10] || row[5] || row[4] || 0);
+          const rate = Number(row[16] || row[7] || row[6] || 0);
+          
+          if (designation && designation !== "Name and Specifications" && designation !== "Equipment" && quantity > 0) {
+            groupedItems[itemCode].equipment.push({
+              equipmentName: designation,
+              coefficient: quantity,
+              hourlyRate: rate
+            });
+            parsedCount++;
+          }
+        }
+        else if (currentSection === "Materials" && row.length >= 6) {
+          const designation = String(row[1] || row[2] || "").trim();
+          const quantity = Number(row[10] || row[5] || row[4] || 0);
+          const unit = String(row[13] || row[6] || row[5] || "pcs").trim().toLowerCase() as DPWHUnit;
+          const rate = Number(row[16] || row[7] || row[6] || 0);
+          
+          if (designation && designation !== "Name and Specifications" && designation !== "Materials" && quantity > 0) {
+            groupedItems[itemCode].materials.push({
+              materialName: designation,
+              coefficient: quantity,
+              unit: unit,
+              unitPrice: rate,
+              wastePercentage: 0
+            });
+            parsedCount++;
+          }
+        }
+
+        // Try to extract the overall DUPA Unit (often found near "Output per day")
+        if (secondCell.includes("D.") && (row[2] || "").toString().includes("Output per day")) {
+           const outputUnit = String(row[9] || row[8] || "").trim().toLowerCase();
+           if (outputUnit.includes("sq.m")) groupedItems[itemCode].unit = "sq_m";
+           else if (outputUnit.includes("cu.m")) groupedItems[itemCode].unit = "cu_m";
+           else if (outputUnit.includes("ln.m")) groupedItems[itemCode].unit = "ln_m";
+           else if (outputUnit.includes("kgs")) groupedItems[itemCode].unit = "kgs";
+           else if (outputUnit.includes("mt")) groupedItems[itemCode].unit = "mt";
+           else if (outputUnit.includes("pcs")) groupedItems[itemCode].unit = "pcs";
+        }
       }
     }
     
-    const formattedItems = Object.values(groupedItems);
+    // If we didn't find multiple sheets with DPWH layout, fallback to the flat table approach
+    if (parsedCount === 0) {
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      
+      for (const row of jsonData as any[]) {
+        const itemCode = row["Item Code"] || row["Item_Code"] || row["ItemCode"] || row["Item No."] || row["Pay Item No."];
+        if (!itemCode) continue;
+        
+        if (!groupedItems[itemCode]) {
+          groupedItems[itemCode] = {
+            itemCode: String(itemCode),
+            description: row["Description"] || "Standard Item",
+            category: row["Category"] || "General",
+            unit: String(row["Unit"] || "sq_m").toLowerCase() as DPWHUnit,
+            materials: [],
+            labor: [],
+            equipment: []
+          };
+        }
+        
+        const designation = row["Designation"] || row["Name"];
+        const type = row["Type"] || row["Component"];
+        
+        if (row["Material Name"] || (designation && type?.toLowerCase().includes("material"))) {
+          groupedItems[itemCode].materials.push({
+            materialName: String(row["Material Name"] || designation),
+            coefficient: Number(row["Material Quantity"] || row["Material Coeff"] || row["Quantity"] || 0),
+            unit: String(row["Material Unit"] || row["Unit"] || "pcs").toLowerCase() as DPWHUnit,
+            unitPrice: Number(row["Material Rate"] || row["Material Price"] || row["Unit Cost"] || 0),
+            wastePercentage: Number(row["Waste %"] || 0)
+          });
+        }
+        
+        if (row["Labor Type"] || (designation && type?.toLowerCase().includes("labor"))) {
+          groupedItems[itemCode].labor.push({
+            laborType: String(row["Labor Type"] || designation),
+            coefficient: Number(row["Labor Hours"] || row["Labor Coeff"] || row["Quantity"] || 0),
+            hourlyRate: Number(row["Labor Rate"] || row["Unit Cost"] || 0)
+          });
+        }
+        
+        if (row["Equipment Name"] || (designation && type?.toLowerCase().includes("equipment"))) {
+          groupedItems[itemCode].equipment.push({
+            equipmentName: String(row["Equipment Name"] || designation),
+            coefficient: Number(row["Equipment Hours"] || row["Equipment Coeff"] || row["Quantity"] || 0),
+            hourlyRate: Number(row["Equipment Rate"] || row["Unit Cost"] || 0)
+          });
+        }
+      }
+    }
+    
+    const formattedItems = Object.values(groupedItems).filter((item: any) => 
+      item.materials.length > 0 || item.labor.length > 0 || item.equipment.length > 0
+    );
     
     if (formattedItems.length === 0) {
-      return { success: 0, failed: 1, errors: ["No valid DUPA items found in the file. Make sure the 'Item Code' column exists."] };
+      return { success: 0, failed: 1, errors: ["No valid DUPA items found in the file. Make sure the format matches DPWH standard sheets."] };
     }
     
     return await bulkImportDUPAItems(formattedItems as any);
