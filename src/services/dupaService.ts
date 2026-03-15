@@ -773,12 +773,13 @@ export async function deleteDUPAItem(id: string): Promise<boolean> {
  */
 export async function syncDUPAWithMarketPrices(dupaItemId: string): Promise<{ success: boolean; updatedCount: number }> {
   // 1. Get DUPA materials
-  const { data: materials, error: matError } = await supabase
+  const { data: materialsData, error: matError } = await supabase
     .from("dupa_material_analysis" as any)
     .select("*")
     .eq("dupa_item_id", dupaItemId);
     
-  if (matError || !materials || materials.length === 0) return { success: true, updatedCount: 0 };
+  const materialsList = (materialsData as any[]) || [];
+  if (matError || materialsList.length === 0) return { success: true, updatedCount: 0 };
 
   // 2. Get all market prices
   const { data: marketPricesData, error: mpError } = await supabase
@@ -793,7 +794,7 @@ export async function syncDUPAWithMarketPrices(dupaItemId: string): Promise<{ su
   let updatedCount = 0;
 
   // 3. For each material, find latest market price
-  for (const mat of materials) {
+  for (const mat of materialsList) {
     // Try to find an exact or partial match in market prices
     const match = marketPrices.find((mp: any) => 
       mp.item_name.toLowerCase() === mat.material_name.toLowerCase() ||
