@@ -145,7 +145,7 @@ export async function searchDUPAItems(filters: DUPASearchFilters, params?: {
     throw error;
   }
 
-  let items = ((data as any[]) || []).map((item) => ({
+  let items: DUPAItem[] = ((data as any[]) || []).map((item) => ({
     id: item.id,
     itemCode: item.item_code,
     description: item.description,
@@ -800,7 +800,7 @@ export async function bulkImportDUPAItems(items: Array<{
     coefficient: number;
     unit: DPWHUnit;
     unitPrice: number;
-    wastePercentage?: number;
+    wastePercentage: number;
   }>;
   labor?: Array<{
     laborType: string;

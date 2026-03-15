@@ -31,7 +31,7 @@ import {
   deletePlanningPhase,
   getBOQItems
 } from "@/services/crmService";
-import { Plus, Edit2, Trash2, Calendar, TrendingUp, Sparkles, Loader2, RefreshCw, Download, FileText, FileSpreadsheet } from "lucide-react";
+import { Plus, Edit2, Trash2, Calendar, TrendingUp, Sparkles, Loader2, RefreshCw, Download, FileText, FileSpreadsheet, DollarSign } from "lucide-react";
 import { GanttChart as GanttIcon } from "lucide-react";
 import { GanttChart } from "@/components/planning/GanttChart";
 import type { Project, PlanningPhase, Role, PlanningPhaseStatus } from "@/types";
@@ -497,7 +497,7 @@ export default function PlanningPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="font-heading text-3xl md:text-4xl mb-2 tracking-wide">PROJECT PLANNING</h1>
-            <p className="text-muted-foreground">Timeline and milestone management</p>
+            <p className="text-muted-foreground">Timeline, milestones, and cost tracking</p>
           </div>
           <div className="flex items-center gap-3">
             <Button
@@ -633,6 +633,13 @@ export default function PlanningPage() {
                         <span>Assigned: {phase.assignedRole}</span>
                       </div>
                     )}
+                    <div className="flex items-center gap-2 text-sm">
+                      <DollarSign className="w-4 h-4 text-green-600" />
+                      <span className="text-muted-foreground">Track expenses in </span>
+                      <a href={`/crm/reports?phase=${phase.id}`} className="text-primary hover:underline font-medium">
+                        Progress Reports
+                      </a>
+                    </div>
                   </div>
 
                   <div className="mt-4 pt-4 border-t">

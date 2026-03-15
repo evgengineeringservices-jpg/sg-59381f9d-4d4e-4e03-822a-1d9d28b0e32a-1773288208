@@ -8,9 +8,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Calendar, Image, Trash2, Edit, ClipboardCheck, CheckCircle } from "lucide-react";
-import { getProgressReports, createProgressReport, updateProgressReport, deleteProgressReport, getProjects } from "@/services/crmService";
-import type { ProgressReport, Project } from "@/types";
+import { Plus, Calendar, Image, Trash2, Edit, ClipboardCheck, CheckCircle, DollarSign, Package } from "lucide-react";
+import { getProgressReports, createProgressReport, updateProgressReport, deleteProgressReport, getProjects, getBOQItems, getPlanningPhases } from "@/services/crmService";
+import type { ProgressReport, Project, BOQItem, PlanningPhase } from "@/types";
+import { supabase } from "@/integrations/supabase/client";
+import { formatPeso } from "@/lib/boqCalculations";
 
 export default function ReportsPage() {
   const [reports, setReports] = useState<ProgressReport[]>([]);
@@ -34,6 +36,20 @@ export default function ReportsPage() {
     authorId: "system",
     milestoneCompleted: false,
   });
+  const [boqItems, setBoqItems] = useState<BOQItem[]>([]);
+  const [phases, setPhases] = useState<PlanningPhase[]>([]);
+  const [showExpenseDialog, setShowExpenseDialog] = useState(false);
+  const [expenseFormData, setExpenseFormData] = useState({
+    materialName: "",
+    category: "",
+    quantity: 0,
+    unit: "",
+    unitPrice: 0,
+    supplier: "",
+    invoiceNumber: "",
+    deliveryDate: "",
+    notes: "",
+  });
 
   useEffect(() => {
     loadData();
@@ -48,10 +64,63 @@ export default function ReportsPage() {
       ]);
       setReports(reportsData);
       setProjects(projectsData);
+      
+      if (selectedProject && selectedProject !== "all") {
+        const [boqData, phaseData] = await Promise.all([
+          getBOQItems(selectedProject),
+          getPlanningPhases(selectedProject),
+        ]);
+        setBoqItems(boqData);
+        setPhases(phaseData);
+      }
     } catch (error) {
       console.error("Error loading data:", error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleSaveExpense(reportId: string) {
+    if (!selectedProject || selectedProject === "all") return;
+    
+    try {
+      const totalCost = expenseFormData.quantity * expenseFormData.unitPrice;
+      
+      const { error } = await supabase
+        .from('actual_material_expenses')
+        .insert({
+          project_id: selectedProject,
+          progress_report_id: reportId,
+          material_name: expenseFormData.materialName,
+          category: expenseFormData.category,
+          quantity: expenseFormData.quantity,
+          unit: expenseFormData.unit,
+          unit_price: expenseFormData.unitPrice,
+          total_cost: totalCost,
+          supplier: expenseFormData.supplier || null,
+          purchase_date: new Date().toISOString().split('T')[0],
+          invoice_number: expenseFormData.invoiceNumber || null,
+          delivery_date: expenseFormData.deliveryDate || null,
+          status: 'delivered',
+          notes: expenseFormData.notes || null,
+        });
+      
+      if (error) throw error;
+      
+      setShowExpenseDialog(false);
+      setExpenseFormData({
+        materialName: "",
+        category: "",
+        quantity: 0,
+        unit: "",
+        unitPrice: 0,
+        supplier: "",
+        invoiceNumber: "",
+        deliveryDate: "",
+        notes: "",
+      });
+    } catch (error) {
+      console.error("Error saving expense:", error);
     }
   }
 
@@ -135,13 +204,15 @@ export default function ReportsPage() {
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Progress Reports</h1>
             <p className="text-sm sm:text-base text-muted-foreground">
-              Track project accomplishments and site updates
+              Track accomplishments and actual material expenses
             </p>
           </div>
-          <Button onClick={() => handleOpenDialog()} size="default" className="touch-manipulation">
-            <Plus className="mr-2 w-4 h-4" />
-            New Report
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => handleOpenDialog()} size="default" className="touch-manipulation">
+              <Plus className="mr-2 w-4 h-4" />
+              New Report
+            </Button>
+          </div>
         </div>
 
         {/* Filters - Mobile Optimized */}
@@ -184,6 +255,17 @@ export default function ReportsPage() {
                       </div>
                     </div>
                     <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setShowExpenseDialog(true);
+                        }}
+                        className="touch-manipulation h-9 w-9"
+                        title="Add Material Expense"
+                      >
+                        <Package className="w-4 h-4" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
@@ -399,6 +481,108 @@ export default function ReportsPage() {
                 </Button>
               </div>
             </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Material Expense Dialog */}
+        <Dialog open={showExpenseDialog} onOpenChange={setShowExpenseDialog}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Record Material Expense</DialogTitle>
+              <DialogDescription>
+                Track actual material costs for cost comparison analysis
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Material Name *</Label>
+                <Input
+                  value={expenseFormData.materialName}
+                  onChange={(e) => setExpenseFormData({ ...expenseFormData, materialName: e.target.value })}
+                  placeholder="e.g., Portland Cement"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Category *</Label>
+                <Input
+                  value={expenseFormData.category}
+                  onChange={(e) => setExpenseFormData({ ...expenseFormData, category: e.target.value })}
+                  placeholder="e.g., Concrete Works"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Quantity *</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={expenseFormData.quantity}
+                  onChange={(e) => setExpenseFormData({ ...expenseFormData, quantity: parseFloat(e.target.value) })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Unit *</Label>
+                <Input
+                  value={expenseFormData.unit}
+                  onChange={(e) => setExpenseFormData({ ...expenseFormData, unit: e.target.value })}
+                  placeholder="e.g., bags, cu_m"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Unit Price (₱) *</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={expenseFormData.unitPrice}
+                  onChange={(e) => setExpenseFormData({ ...expenseFormData, unitPrice: parseFloat(e.target.value) })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Total Cost</Label>
+                <div className="text-2xl font-bold text-primary pt-2">
+                  {formatPeso(expenseFormData.quantity * expenseFormData.unitPrice)}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Supplier</Label>
+                <Input
+                  value={expenseFormData.supplier}
+                  onChange={(e) => setExpenseFormData({ ...expenseFormData, supplier: e.target.value })}
+                  placeholder="e.g., ABC Hardware"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Invoice Number</Label>
+                <Input
+                  value={expenseFormData.invoiceNumber}
+                  onChange={(e) => setExpenseFormData({ ...expenseFormData, invoiceNumber: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2 col-span-2">
+                <Label>Delivery Date</Label>
+                <Input
+                  type="date"
+                  value={expenseFormData.deliveryDate}
+                  onChange={(e) => setExpenseFormData({ ...expenseFormData, deliveryDate: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2 col-span-2">
+                <Label>Notes</Label>
+                <Textarea
+                  value={expenseFormData.notes}
+                  onChange={(e) => setExpenseFormData({ ...expenseFormData, notes: e.target.value })}
+                  placeholder="Additional details..."
+                  rows={3}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-4">
+              <Button variant="outline" onClick={() => setShowExpenseDialog(false)}>
+                Cancel
+              </Button>
+              <Button onClick={() => handleSaveExpense(filteredReports[0]?.id)}>
+                Save Expense
+              </Button>
+            </div>
           </DialogContent>
         </Dialog>
       </div>

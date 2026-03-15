@@ -37,6 +37,7 @@ import { exportBOQToExcel, printBOQ } from "@/lib/exportUtils";
 import { GenerateBOQDialog } from "@/components/boq/GenerateBOQDialog";
 import { Pagination } from "@/components/shared/Pagination";
 import { usePagination } from "@/hooks/usePagination";
+import { supabase } from "@/lib/supabase";
 
 type SortField = "itemNo" | "description" | "category" | "quantity" | "materialCost" | "laborCost" | "total";
 type SortDirection = "asc" | "desc";
@@ -60,6 +61,8 @@ export default function BOQPage() {
   
   // View states
   const [viewMode, setViewMode] = useState<ViewMode>("flat");
+  const [showCostComparison, setShowCostComparison] = useState(false);
+  const [costComparison, setCostComparison] = useState<any[]>([]);
   
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<BOQItem | null>(null);
@@ -130,6 +133,28 @@ export default function BOQPage() {
       console.error("Failed to load price changes:", error);
     }
   }
+
+  async function loadCostComparison() {
+    if (!selectedProject) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('boq_actual_comparison')
+        .select('*')
+        .eq('project_id', selectedProject);
+      
+      if (error) throw error;
+      setCostComparison(data || []);
+    } catch (error) {
+      console.error("Error loading cost comparison:", error);
+    }
+  }
+
+  useEffect(() => {
+    if (selectedProject && showCostComparison) {
+      loadCostComparison();
+    }
+  }, [selectedProject, showCostComparison]);
 
   function applyFiltersAndSort() {
     let filtered = [...items];
@@ -356,10 +381,18 @@ export default function BOQPage() {
           <div>
             <h1 className="text-3xl font-bold">Bill of Quantities (BOQ)</h1>
             <p className="text-muted-foreground mt-1">
-              DPWH-style estimation with automated cost calculation
+              DPWH DUPA-based estimation with cost tracking
             </p>
           </div>
           <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowCostComparison(!showCostComparison)}
+              disabled={!selectedProject}
+            >
+              <TrendingUp className="h-4 w-4 mr-2" />
+              {showCostComparison ? "Hide" : "Show"} Cost Analysis
+            </Button>
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="outline"
@@ -406,6 +439,52 @@ export default function BOQPage() {
             </Button>
           </div>
         </div>
+
+        {/* Cost Comparison Alert */}
+        {showCostComparison && costComparison.length > 0 && (
+          <Card className="border-blue-500">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-blue-500" />
+                BOQ vs Actual Cost Analysis
+              </CardTitle>
+              <CardDescription>
+                Comparing proposed BOQ estimates with actual material expenses
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {costComparison.slice(0, 5).map((item) => (
+                  <div key={item.boq_item_id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                    <div className="flex-1">
+                      <p className="font-medium">{item.description}</p>
+                      <p className="text-sm text-muted-foreground">Item: {item.item_no}</p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <p className="text-sm text-muted-foreground">BOQ Estimate</p>
+                        <p className="font-semibold">{formatPeso(item.boq_material_cost)}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm text-muted-foreground">Actual Cost</p>
+                        <p className="font-semibold">{formatPeso(item.actual_material_cost)}</p>
+                      </div>
+                      <Badge
+                        variant={
+                          item.budget_status === 'over_budget' ? "destructive" :
+                          item.budget_status === 'under_budget' ? "default" : "secondary"
+                        }
+                      >
+                        {item.cost_variance_percentage > 0 ? "+" : ""}
+                        {item.cost_variance_percentage.toFixed(1)}%
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Price Change Alert */}
         {significantChanges.length > 0 && (
