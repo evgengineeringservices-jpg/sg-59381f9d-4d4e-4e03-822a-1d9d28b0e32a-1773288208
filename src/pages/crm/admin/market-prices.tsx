@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Edit, Trash2, Search, TrendingUp, TrendingDown, RefreshCw, Calendar, FileSpreadsheet } from "lucide-react";
+import { Plus, Edit, Trash2, Search, TrendingUp, TrendingDown, RefreshCw, Calendar, FileSpreadsheet, Globe, ShoppingCart } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,6 +51,7 @@ export default function MarketPricesPage() {
   const [priceChanges, setPriceChanges] = useState<any[]>([]);
   const [showPriceChanges, setShowPriceChanges] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showOnlineShops, setShowOnlineShops] = useState(false);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -63,6 +64,17 @@ export default function MarketPricesPage() {
     source: "",
     notes: "",
   });
+
+  // Online shop sources for material pricing
+  const onlineShops = [
+    { name: "Wilcon Depot", url: "https://shop.wilcon.com.ph/", logo: "🏢" },
+    { name: "Topmost Hardware", url: "https://www.topmosthardware.ph/", logo: "🔧" },
+    { name: "True Value", url: "https://truevalue.com.ph/", logo: "✓" },
+    { name: "Buildmate", url: "https://www.shopbuildmate.com/", logo: "🏗️" },
+    { name: "GH Hardware", url: "https://ghhardware.company.site/", logo: "⚒️" },
+    { name: "Shopee", url: "https://shopee.ph/", logo: "🛒" },
+    { name: "Lazada", url: "https://www.lazada.com.ph/", logo: "🛍️" },
+  ];
 
   useEffect(() => {
     loadPrices();
@@ -212,12 +224,19 @@ export default function MarketPricesPage() {
       {/* Header */}
       <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-3xl font-bold">Market Prices</h1>
+          <h1 className="text-3xl font-bold">Market Prices & Material Cost Analysis</h1>
           <p className="text-muted-foreground mt-1">
-            Manage construction material market prices for automated BOQ costing
+            Track construction material prices for DUPA-based BOQ costing
           </p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setShowOnlineShops(!showOnlineShops)}
+          >
+            <Globe className="h-4 w-4 mr-2" />
+            Online Shops
+          </Button>
           <Button
             variant="outline"
             onClick={() => setShowPriceChanges(!showPriceChanges)}
@@ -242,6 +261,51 @@ export default function MarketPricesPage() {
           </div>
         </div>
       </div>
+
+      {/* Online Shops Reference Card */}
+      {showOnlineShops && (
+        <Card className="border-blue-500">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ShoppingCart className="h-5 w-5 text-blue-500" />
+              Online Material Suppliers - Price Reference
+            </CardTitle>
+            <CardDescription>
+              Check current market prices from these verified online sources
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {onlineShops.map((shop) => (
+                <a
+                  key={shop.name}
+                  href={shop.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 p-4 border rounded-lg hover:bg-accent transition-colors"
+                >
+                  <div className="text-3xl">{shop.logo}</div>
+                  <div className="flex-1">
+                    <p className="font-semibold">{shop.name}</p>
+                    <p className="text-xs text-muted-foreground">Online Store</p>
+                  </div>
+                  <Globe className="h-4 w-4 text-muted-foreground" />
+                </a>
+              ))}
+            </div>
+            <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-950 rounded-lg">
+              <p className="text-sm font-medium mb-2">💡 How to use:</p>
+              <ol className="text-sm text-muted-foreground space-y-1 ml-4 list-decimal">
+                <li>Search for materials on these online shops</li>
+                <li>Compare prices across multiple suppliers</li>
+                <li>Record the best prices in your Market Price database</li>
+                <li>Use recorded prices for DUPA material cost analysis</li>
+                <li>Update prices regularly to maintain accurate BOQ estimates</li>
+              </ol>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Price Change Alerts */}
       {showPriceChanges && significantChanges.length > 0 && (
